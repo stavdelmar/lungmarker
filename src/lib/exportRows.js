@@ -19,7 +19,7 @@ export function measurementRows(scans, nodules, events) {
     return [
       e(s.patient_id), d10(s.scan_date), e(s.timepoint), e(s.series_number), e(s.slice_thickness_mm), e(n.nodule_label), e(n.lobe), e(n.slice_number), e(n.type),
       n1(n.long_axis_mm), n1(n.short_axis_mm), n1(n.mean_diameter_mm), n.type === 'Part-solid' ? n1(n.solid_component_mm) : '',
-      n.outline_confirmed && n.volume_mm3 != null ? Math.round(n.volume_mm3) : '',
+      n.outline_confirmed && !n.volume_stale && n.volume_mm3 != null ? Math.round(n.volume_mm3) : '',
       s.timepoint === 'Baseline' ? '' : e(n.match_to_prior), e(s.minutes_on_scan), e(s.approved_by_initials),
       [n.notes?.trim(), tag].filter(Boolean).join('; '),
     ];

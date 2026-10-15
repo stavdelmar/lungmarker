@@ -70,6 +70,11 @@
     "volume_mm3": {
       "type": "number"
     },
+    "volume_stale": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when the outline was edited by hand and the 3D volume has not been recomputed by the engine yet"
+    },
     "outline_confirmed": {
       "type": "boolean",
       "default": false

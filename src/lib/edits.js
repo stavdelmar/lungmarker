@@ -2,7 +2,7 @@ import { base44 } from '@/api/base44Client';
 import { meanOf } from '@/lib/geometry';
 
 const AI_KEY = { lobe: 'lobe', type: 'type', slice_number: 'key_slice_number', long_axis_mm: 'long', short_axis_mm: 'short', volume_mm3: 'volume', key_contour_px: 'contour', match_to_prior: 'match_label' };
-const SKIP = ['long_axis_px', 'short_axis_px', 'mean_diameter_mm', 'was_edited', 'outline_confirmed_by_initials', 'outline_confirmed_at', 'key_slice_z'];
+const SKIP = ['long_axis_px', 'short_axis_px', 'mean_diameter_mm', 'was_edited', 'outline_confirmed_by_initials', 'outline_confirmed_at', 'key_slice_z', 'volume_stale'];
 export const AI_FIELDS = ['lobe', 'type', 'slice_number', 'long_axis_mm', 'short_axis_mm', 'solid_component_mm', 'volume_mm3', 'outline'];
 
 export function fmtVal(key, v) {

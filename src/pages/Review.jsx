@@ -108,10 +108,18 @@ export default function Review() {
     const nd = { ...d, [key]: d[key].map((p, i) => (i === h.idx ? pt : p)) };
     draftRef.current = nd; return nd;
   });
+  // Hand-edited outline: ask the engine to redo the 3D outline + volume from Daniel's polygon.
+  // Without a live engine, keep his polygon and mark the volume as stale (it is then not exported).
+  const recomputeFromPolygon = (poly) => runEngine(async () => {
+    const f = await engine.refine(base, sid, { finding_id: sel.engine_finding_id || null, z: sel.key_slice_z, points: [], polygon_px: poly });
+    await save({ key_contour_px: poly, volume_mm3: f.volume_mm3 == null ? null : Math.round(f.volume_mm3), volume_stale: false, ...(f.finding_id && !sel.engine_finding_id ? { engine_finding_id: f.finding_id } : {}) }, { source: 'hand edit, volume recomputed' });
+  });
   const onDragEnd = (h) => {
     const d = draftRef.current;
-    if (h.kind === 'contour') save({ key_contour_px: d.key_contour_px });
-    else save({ [h.kind]: d[h.kind], [h.kind === 'long_axis_px' ? 'long_axis_mm' : 'short_axis_mm']: lenMm(d[h.kind], sp) });
+    if (h.kind === 'contour') {
+      if (refineOk && sel.engine_finding_id) recomputeFromPolygon(d.key_contour_px);
+      else save({ key_contour_px: d.key_contour_px, volume_stale: true });
+    } else save({ [h.kind]: d[h.kind], [h.kind === 'long_axis_px' ? 'long_axis_mm' : 'short_axis_mm']: lenMm(d[h.kind], sp) });
   };
 
   const createAdded = async (geom) => {
@@ -120,20 +128,29 @@ export default function Review() {
     const rec = await Nodule.create({
       scan: scan.id, engine_scan_id: sid, nodule_label: label, source: 'Added by reviewer', engine_finding_id: '', status: 'Pending',
       was_edited: false, lobe: '', type: 'Solid', slice_number: meta.slices?.find((s) => s.z === z)?.slice_number ?? z + 1, key_slice_z: z,
-      outline_confirmed: false, match_to_prior: '', flags: [], ai_draft: {}, key_contour_px: [], ...geom,
+      outline_confirmed: false, match_to_prior: '', flags: [], ai_draft: {}, key_contour_px: [], volume_stale: !geom.volume_mm3, ...geom,
       mean_diameter_mm: meanOf(geom.long_axis_mm, geom.short_axis_mm),
     });
     await logEvent(scan, rec, 'added', '', label, me);
     await refresh(); setSelId(rec.id);
   };
 
+  const quickRefine = (pt, label) => runEngine(async () => {
+    const f = await engine.refine(base, sid, { finding_id: sel.engine_finding_id || null, z: sel.key_slice_z, points: [{ x: pt[0], y: pt[1], label }], polygon_px: draftRef.current?.key_contour_px });
+    await save(findingPatch(f, sel.key_slice_z), { source: label ? 'AI grow click' : 'AI trim click' });
+  });
+
   const onImageClick = (pt, e) => {
+    if ((mode === 'trim' || mode === 'grow') && sel && !busy) {
+      if (z !== sel.key_slice_z) { setNotice('Trim / grow works on the key slice of the selected nodule.'); return; }
+      return quickRefine(pt, mode === 'grow' ? 1 : 0);
+    }
     if (mode === 'fix') setClicks((c) => [...c, { x: pt[0], y: pt[1], label: e.shiftKey ? 0 : 1 }]);
     if (mode !== 'add') return;
     if (refineOk) {
       runEngine(async () => {
         const f = await engine.refine(base, sid, { finding_id: null, z, points: [{ x: pt[0], y: pt[1], label: 1 }] });
-        await createAdded({ ...findingPatch(f, z), flags: f.flags || [] });
+        await createAdded({ ...findingPatch(f, z), engine_finding_id: f.finding_id || '', flags: f.flags || [] });
         setMode(null);
       });
       return;
@@ -175,7 +192,7 @@ export default function Review() {
   };
 
   const keys = useRef();
-  keys.current = { accept, next, canAct: !locked && !!sel, reject: () => setRejectOpen(true), step };
+  keys.current = { accept, next, canAct: !locked && !!sel, reject: () => setRejectOpen(true), step, quick: !locked && !!sel && refineOk && !!meta, setMode, jump: () => sel && setZ(sel.key_slice_z) };
   useEffect(() => {
     const h = (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.ctrlKey || e.metaKey) return;
@@ -186,6 +203,8 @@ export default function Review() {
       else if (e.key.toLowerCase() === 'n') k.next();
       else if (k.canAct && e.key.toLowerCase() === 'a') k.accept();
       else if (k.canAct && e.key.toLowerCase() === 'r') k.reject();
+      else if (k.quick && e.key.toLowerCase() === 't') { k.jump(); k.setMode((m) => (m === 'trim' ? null : 'trim')); }
+      else if (k.quick && e.key.toLowerCase() === 'g') { k.jump(); k.setMode((m) => (m === 'grow' ? null : 'grow')); }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
@@ -201,9 +220,12 @@ export default function Review() {
   const modeBar = mode && (
     <div className="flex items-center gap-3 px-3 py-2 bg-teal-950/60 border-b border-teal-800 text-xs text-teal-100">
       {mode === 'fix' && <span>Click inside the nodule = part of nodule · Shift+click = not nodule · <span className="font-mono">{clicks.length}</span> points</span>}
+      {mode === 'trim' && <span><b>Trim −</b> · click on a vessel tail or anything that is not nodule; the AI redraws at once. Click again to trim more. Esc when done.</span>}
+      {mode === 'grow' && <span><b>Grow +</b> · click on nodule tissue the outline missed; the AI redraws at once. Esc when done.</span>}
       {mode === 'add' && <span>{refineOk ? 'Click on the nodule the AI missed.' : `Click the long axis ends, then the short axis ends (${clicks.length}/4).`}</span>}
       {mode === 'fix' && <button disabled={!clicks.length || busy} onClick={sendFix} className="ml-auto h-7 px-3 rounded bg-teal-400 text-teal-950 font-medium disabled:opacity-50">Send</button>}
-      <button onClick={() => { setMode(null); setClicks([]); }} className={`${mode === 'fix' ? '' : 'ml-auto'} h-7 px-3 rounded border border-teal-700 hover:bg-teal-900`}>Cancel</button>
+      {busy && (mode === 'trim' || mode === 'grow') && <span className="ml-auto text-teal-200">AI is redrawing…</span>}
+      <button onClick={() => { setMode(null); setClicks([]); }} className={`${mode === 'fix' || busy ? '' : 'ml-auto'} h-7 px-3 rounded border border-teal-700 hover:bg-teal-900`}>{mode === 'trim' || mode === 'grow' ? 'Done' : 'Cancel'}</button>
     </div>
   );
 
@@ -232,7 +254,10 @@ export default function Review() {
             outline: {
               refineOk: refineOk && !!meta,
               onConfirm: () => save({ outline_confirmed: true, outline_confirmed_by_initials: me.initials, outline_confirmed_at: new Date().toISOString() }),
-              onReset: () => save({ key_contour_px: sel.ai_draft.contour }),
+              onReset: () => save({ key_contour_px: sel.ai_draft.contour, volume_mm3: sel.ai_draft.volume ?? null, volume_stale: false }),
+              onTrim: () => { setZ(sel.key_slice_z); setMode(mode === 'trim' ? null : 'trim'); setClicks([]); },
+              onGrow: () => { setZ(sel.key_slice_z); setMode(mode === 'grow' ? null : 'grow'); setClicks([]); },
+              quickMode: mode,
               onRecalc: () => { const r = axesFromOutline(draft?.key_contour_px, sp); if (r) save(r); },
               onFix: () => { setZ(sel.key_slice_z); setMode('fix'); setClicks([]); },
             },

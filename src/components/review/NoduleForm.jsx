@@ -24,7 +24,7 @@ export default function NoduleForm({ n, locked, followup, priorLabels, aiSuggest
         {n.type === 'Part-solid' && <NumField label="Solid component mm" value={n.solid_component_mm} disabled={locked} onCommit={(v) => onSave({ solid_component_mm: v })} />}
         <div className="col-span-2">
           <NumField label="Volume mm³" value={n.volume_mm3} disabled={locked} round={Math.round} muted={!n.outline_confirmed} onCommit={(v) => onSave({ volume_mm3: v })}
-            hint={n.outline_confirmed ? `confirmed by ${n.outline_confirmed_by_initials}` : 'AI estimate – confirm outline to record'} />
+            hint={n.volume_stale ? 'Outline edited by hand – volume not recomputed yet (not exported)' : n.outline_confirmed ? `confirmed by ${n.outline_confirmed_by_initials}` : 'AI estimate – confirm outline to record'} />
         </div>
       </div>
       <OutlineActions n={n} locked={locked} {...outline} />
