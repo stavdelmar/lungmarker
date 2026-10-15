@@ -1,0 +1,15 @@
+PASS  18 columns, exact names and order                                         │ 18 columns: Patient ID | Scan date | Timepoint | Series # | Slice thickness (mm) | Nodule ID | Lobe | Slice # | Type | Long axis (mm) | Short axis (mm) | Mean diameter (mm) | Solid component (mm) | Volume (mm3) | Match to prior | Minutes on scan | Measured by | Notes
+PASS  Formats like his example row (date, Timepoint, Lobe, N1, initials)        │ 2006-01-10 Baseline N1 'RUL' DR; 2006-01-10 Follow-up 1 N1 'RUL' DR; 2006-01-10 Baseline N2 'LLL' DR; 2006-01-10 Follow-up 1 N2 'RML' DR; 2006-01-10 Baseline N3 (empty) DR
+PASS  Mean diameter = (long + short) / 2                                        │ N1 (Base): (14.2+11)/2 → 12.6; N1 (Foll): (14.6+10.8)/2 → 12.7; N2 (Base): (6.8+5.2)/2 → 6; N2 (Foll): (4.4+4)/2 → 4.2; N3 (Base): (3.5+2.8)/2 → 3.2
+PASS  Slice # = viewer image number of the key (largest) slice                  │ N1 (Base): 142 vs key slice 142; N1 (Foll): 151 vs key slice 151; N2 (Base): 221 vs key slice 221; N2 (Foll): 176 vs key slice 176; N3 (Base): 91 vs key slice 91
+PASS  Volume only after the outline is confirmed (else empty)                   │ N1 (Base): confirmed=True, stale=False → 1180; N1 (Foll): confirmed=True, stale=False → 1214; N2 (Base): confirmed=True, stale=True → (empty); N2 (Foll): confirmed=False, stale=False → (empty); N3 (Base): confirmed=False, stale=True → (empty)
+PASS  Match to prior: Daniel's pick or N/A, never AI-filled, empty on Baseline  │ after AI draft: N1=(empty) (AI suggests N1), N2=(empty) (AI suggests nothing) → exported: N1 (Base)=(empty), N1 (Foll)='N1', N2 (Base)=(empty), N2 (Foll)='N/A', N3 (Base)=(empty)
+FAIL  Solid component empty for Solid/Ground-glass, filled for Part-solid       │ N1 (Foll) Part-solid solid=(empty)
+PASS  Minutes on scan = built-in timer (active seconds, rounded up)             │ Baseline: timer 1980 s → 33 min; Follow-up 1: timer 1500 s → 25 min
+FAIL  Blank cells truly empty (no '', 0, null in the file)                      │ M2 Solid component (mm) stored as <v></v>; O2 Match to prior stored as <v></v>; M3 Solid component (mm) stored as <v></v>; M4 Solid component (mm) stored as <v></v>; N4 Volume (mm3) stored as <v></v>; O4 Match to prior stored as <v></v>; M5 Solid component (mm) stored as <v></v>; N5 Volume (mm3) stored as <v></v> … 12 cells
+FAIL  Only nodules ≥ 4 mm (long axis)                                           │ Base N3 long axis 3.5 mm
+FAIL  Edit trail: AI draft for every exported nodule                            │ 0 'AI draft' rows; AI value column filled on changed fields: True; nodules accepted unchanged: 3
+PASS  Edit trail: Daniel's changes (old → new, who, when)                       │ fields changed: long_axis_mm, match_to_prior, notes, outline, outline_confirmed, scan_approved, status
+PASS  Edit trail: who approved each scan                                        │ Baseline: Approved by DR by DR at 2026-10-15 16:07; Follow-up 1: Approved by DR by DR at 2026-10-15 16:07
+
+9/13 pass

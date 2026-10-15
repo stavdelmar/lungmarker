@@ -55,5 +55,6 @@ export function findingPatch(f, z) {
     short_axis_mm: r1(f.short_axis_mm),
     volume_mm3: f.volume_mm3 == null ? null : Math.round(f.volume_mm3),
     volume_stale: false,
+    ...(f.solid_component_mm != null ? { solid_component_mm: r1(f.solid_component_mm) } : {}),
   };
 }

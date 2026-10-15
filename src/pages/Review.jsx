@@ -8,8 +8,9 @@ import { useMe } from '@/hooks/useMe';
 import { useSettings, useHealth } from '@/hooks/useAppData';
 import { useScanTimer } from '@/hooks/useScanTimer';
 import { initNodules } from '@/lib/initNodules';
-import { saveNodule, logEvent } from '@/lib/edits';
+import { saveNodule, logEvent, approveScan } from '@/lib/edits';
 import { axesFromOutline, lenMm, meanOf, findingPatch } from '@/lib/geometry';
+import { MIN_LONG_AXIS_MM } from '@/lib/exportRows';
 import EngineOffline from '@/components/EngineOffline';
 import ReviewHeader from '@/components/review/ReviewHeader';
 import ViewerPane from '@/components/review/ViewerPane';
@@ -174,15 +175,14 @@ export default function Review() {
     const order = [...nodules.slice(idx + 1), ...nodules.slice(0, idx + 1)];
     select(order.find((n) => n.status === 'Pending' && n.id !== selId) || order[0]);
   };
-  const canAccept = !locked && !!sel && (!followup || !!sel.match_to_prior);
+  const under4 = !!sel && !(Number(sel.long_axis_mm) >= MIN_LONG_AXIS_MM);
+  const canAccept = !locked && !!sel && !under4 && (!followup || !!sel.match_to_prior);
   const accept = async () => { if (!canAccept) return; await save({ status: 'Accepted', reject_reason: '' }); next(); };
   const reject = async (reason) => { await save({ status: 'Rejected', reject_reason: reason }); next(); };
   const allDone = nodules.every((n) => n.status === 'Accepted' || n.status === 'Rejected');
 
   const approve = async () => {
-    const secs = timer.getSecs();
-    await Scan.update(scan.id, { review_status: 'Approved', approved_by_email: me.user.email, approved_by_initials: me.initials, approved_at: new Date().toISOString(), active_seconds: secs, minutes_on_scan: Math.ceil(secs / 60) });
-    await logEvent(scan, null, 'scan_approved', 'In review', 'Approved', me);
+    await approveScan(scan, timer.getSecs(), me);
     qc.invalidateQueries({ queryKey: ['scan', id] });
   };
   const reopen = async () => {
@@ -247,7 +247,7 @@ export default function Review() {
         </div>
         <NodulePanel scan={scan} nodules={nodules} sel={sel} onSelect={select} locked={locked} isReviewer={me.isReviewer} followup={followup}
           adding={mode === 'add'} onAdd={() => { setMode(mode === 'add' ? null : 'add'); setClicks([]); }}
-          canAccept={canAccept} onAccept={accept} onRejectClick={() => setRejectOpen(true)} onNext={next} allDone={allDone} onApprove={approve} onReopen={reopen}
+          canAccept={canAccept} under4={under4} onAccept={accept} onRejectClick={() => setRejectOpen(true)} onNext={next} allDone={allDone} onApprove={approve} onReopen={reopen}
           prior={{ base, priorScan: priorQ.data?.scan, priorNodules }}
           formProps={{
             priorLabels: priorNodules.map((p) => p.nodule_label), aiSuggest, onSave: save,

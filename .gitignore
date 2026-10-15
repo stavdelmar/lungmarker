@@ -37,3 +37,6 @@ dist-ssr
 
 # Local link to a Base44 app, written by `base44 link`
 base44/.app.jsonc
+# export test outputs (reports are kept)
+tests/export/*.xlsx
+tests/export/*.state.json

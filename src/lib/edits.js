@@ -1,7 +1,7 @@
 import { base44 } from '@/api/base44Client';
 import { meanOf } from '@/lib/geometry';
 
-const AI_KEY = { lobe: 'lobe', type: 'type', slice_number: 'key_slice_number', long_axis_mm: 'long', short_axis_mm: 'short', volume_mm3: 'volume', key_contour_px: 'contour', match_to_prior: 'match_label' };
+const AI_KEY = { lobe: 'lobe', type: 'type', slice_number: 'key_slice_number', long_axis_mm: 'long', short_axis_mm: 'short', solid_component_mm: 'solid', volume_mm3: 'volume', key_contour_px: 'contour', match_to_prior: 'match_label' };
 const SKIP = ['long_axis_px', 'short_axis_px', 'mean_diameter_mm', 'was_edited', 'outline_confirmed_by_initials', 'outline_confirmed_at', 'key_slice_z', 'volume_stale'];
 export const AI_FIELDS = ['lobe', 'type', 'slice_number', 'long_axis_mm', 'short_axis_mm', 'solid_component_mm', 'volume_mm3', 'outline'];
 
@@ -37,8 +37,10 @@ export async function saveNodule(scan, nodule, patch, me, { source } = {}) {
     if (SKIP.includes(k)) return;
     if (JSON.stringify(nodule[k] ?? null) === JSON.stringify(p[k] ?? null)) return;
     const field = k === 'key_contour_px' ? 'outline' : k;
+    // An outline change is described by how it was made, since "16 points → 16 points" says nothing.
+    const newV = field === 'outline' ? `${fmtVal(k, p[k])}, ${source || 'points moved by hand'}` : fmtVal(k, p[k]);
     events.push({
-      ...base, field, ai_value: fmtVal(k, nodule.ai_draft?.[AI_KEY[k]]), old_value: fmtVal(k, nodule[k]), new_value: fmtVal(k, p[k]),
+      ...base, field, ai_value: fmtVal(k, nodule.ai_draft?.[AI_KEY[k]]), old_value: fmtVal(k, nodule[k]), new_value: newV,
       ...(source && field === 'outline' ? { source } : {}),
     });
   });
@@ -46,4 +48,11 @@ export async function saveNodule(scan, nodule, patch, me, { source } = {}) {
   if (events.some((e) => AI_FIELDS.includes(e.field))) p.was_edited = true;
   await base44.entities.Nodule.update(nodule.id, p);
   await base44.entities.EditEvent.bulkCreate(events);
+}
+// Approve a scan: stamps who/when and the timer's minutes, and logs it in the edit trail.
+export async function approveScan(scan, secs, me) {
+  const patch = { review_status: 'Approved', approved_by_email: me.user.email, approved_by_initials: me.initials, approved_at: new Date().toISOString(), active_seconds: secs, minutes_on_scan: Math.ceil(secs / 60) };
+  await base44.entities.Scan.update(scan.id, patch);
+  await logEvent(scan, null, 'scan_approved', 'In review', 'Approved', me);
+  return patch;
 }

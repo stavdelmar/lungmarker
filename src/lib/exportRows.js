@@ -3,38 +3,53 @@ export const TRAIL_HEADERS = ['Patient ID', 'Scan date', 'Timepoint', 'Nodule ID
 export const ONE_DEC_COLS = [9, 10, 11, 12];
 
 const FIELD_NAMES = { long_axis_mm: 'long axis', short_axis_mm: 'short axis', outline: 'outline', lobe: 'lobe', type: 'type', volume_mm3: 'volume', solid_component_mm: 'solid component', slice_number: 'slice' };
-const n1 = (v) => (v == null || v === '' ? '' : Number(Number(v).toFixed(1)));
-const e = (v) => (v == null ? '' : v);
-const d10 = (v) => (v ? String(v).slice(0, 10) : '');
-const ts = (v) => (v ? new Date(v).toISOString().slice(0, 16).replace('T', ' ') : '');
+// Blank = null, so the Excel cell is really empty (not an empty-text cell). toCsv writes null as nothing.
+const n1 = (v) => (v == null || v === '' ? null : Number(Number(v).toFixed(1)));
+const e = (v) => (v == null || v === '' ? null : v);
+const d10 = (v) => (v ? String(v).slice(0, 10) : null);
+const ts = (v) => (v ? new Date(v).toISOString().slice(0, 16).replace('T', ' ') : null);
+export const MIN_LONG_AXIS_MM = 4; // Daniel measures nodules of 4 mm and up
 
-function sortKey(s, n) { return `${s.patient_id}|${d10(s.scan_date)}|${String(n?.nodule_label || '').padStart(5, '0')}`; }
+// Group rows by scan (patient, date, Baseline before Follow-up 1, …), then N1, N2, … within the scan.
+const tpRank = (t = '') => (t === 'Baseline' ? 0 : parseInt(String(t).replace(/\D/g, ''), 10) || 99);
+function sortKey(s, n) { return `${s.patient_id}|${d10(s.scan_date)}|${String(tpRank(s.timepoint)).padStart(3, '0')}|${String(n?.nodule_label || '').replace(/\d+/, (d) => d.padStart(4, '0'))}`; }
 
 export function measurementRows(scans, nodules, events) {
   const sMap = Object.fromEntries(scans.map((s) => [s.id, s]));
-  return nodules.filter((n) => sMap[n.scan]).sort((a, b) => sortKey(sMap[a.scan], a).localeCompare(sortKey(sMap[b.scan], b))).map((n) => {
+  return nodules.filter((n) => sMap[n.scan] && Number(n.long_axis_mm) >= MIN_LONG_AXIS_MM).sort((a, b) => sortKey(sMap[a.scan], a).localeCompare(sortKey(sMap[b.scan], b))).map((n) => {
     const s = sMap[n.scan];
     const edited = [...new Set(events.filter((ev) => ev.nodule === n.id && FIELD_NAMES[ev.field]).map((ev) => FIELD_NAMES[ev.field]))];
     const tag = n.source === 'AI' ? (edited.length ? `AI-assisted; edited: ${edited.join(', ')}` : 'AI-assisted; accepted unchanged') : 'Added by reviewer';
     return [
       e(s.patient_id), d10(s.scan_date), e(s.timepoint), e(s.series_number), e(s.slice_thickness_mm), e(n.nodule_label), e(n.lobe), e(n.slice_number), e(n.type),
-      n1(n.long_axis_mm), n1(n.short_axis_mm), n1(n.mean_diameter_mm), n.type === 'Part-solid' ? n1(n.solid_component_mm) : '',
-      n.outline_confirmed && !n.volume_stale && n.volume_mm3 != null ? Math.round(n.volume_mm3) : '',
-      s.timepoint === 'Baseline' ? '' : e(n.match_to_prior), e(s.minutes_on_scan), e(s.approved_by_initials),
-      [n.notes?.trim(), tag].filter(Boolean).join('; '),
+      n1(n.long_axis_mm), n1(n.short_axis_mm), n1(n.mean_diameter_mm), n.type === 'Part-solid' ? n1(n.solid_component_mm) : null,
+      n.outline_confirmed && !n.volume_stale && n.volume_mm3 != null ? Math.round(n.volume_mm3) : null,
+      s.timepoint === 'Baseline' ? null : e(n.match_to_prior), e(s.minutes_on_scan), e(s.approved_by_initials),
+      [n.notes?.trim(), tag].filter(Boolean).join('; ') || null,
     ];
   });
 }
 
-export function trailRows(scans, events) {
+const v1 = (v) => (v == null || v === '' ? '–' : Number(v).toFixed(1));
+// One "AI draft" row per exported nodule (what the AI proposed, before any edit), then every change in time order.
+export function trailRows(scans, events, nodules = []) {
   const sMap = Object.fromEntries(scans.map((s) => [s.id, s]));
-  return events.filter((ev) => sMap[ev.scan]).map((ev) => {
-    const s = sMap[ev.scan];
-    return [e(s.patient_id), d10(s.scan_date), e(s.timepoint), e(ev.nodule_label), ev.source ? `${ev.field} (${ev.source})` : e(ev.field), e(ev.ai_value), e(ev.old_value), e(ev.new_value), e(ev.edited_by_initials), ts(ev.edited_at)];
+  const head = (s, label) => [e(s.patient_id), d10(s.scan_date), e(s.timepoint), e(label)];
+  const drafts = nodules.filter((n) => sMap[n.scan] && Number(n.long_axis_mm) >= MIN_LONG_AXIS_MM).sort((a, b) => sortKey(sMap[a.scan], a).localeCompare(sortKey(sMap[b.scan], b))).map((n) => {
+    const s = sMap[n.scan], a = n.ai_draft || {};
+    if (n.source !== 'AI') return [...head(s, n.nodule_label), 'AI draft', 'none (added by reviewer)', null, null, e(s.engine_version) ? `AI engine ${s.engine_version}` : 'AI engine', ts(n.created_date)];
+    const match = a.match_label ? `suggested match ${a.match_label}` : s.timepoint === 'Baseline' ? null : 'no match suggested';
+    const summary = [a.lobe, a.type, `slice ${a.key_slice_number ?? '–'}`, `long ${v1(a.long)} × short ${v1(a.short)} mm`, a.solid != null ? `solid ${v1(a.solid)} mm` : null, a.volume != null ? `volume ${Math.round(a.volume)} mm3` : null, `outline ${(a.contour || []).length} points`, match].filter(Boolean).join('; ');
+    return [...head(s, n.nodule_label), 'AI draft', summary, null, null, `AI engine ${s.engine_version || ''}`.trim(), ts(n.created_date)];
   });
+  const changes = events.filter((ev) => sMap[ev.scan]).sort((a, b) => (sortKey(sMap[a.scan], { nodule_label: '' }) + a.edited_at).localeCompare(sortKey(sMap[b.scan], { nodule_label: '' }) + b.edited_at)).map((ev) => {
+    const s = sMap[ev.scan];
+    return [...head(s, ev.nodule_label), ev.source ? `${ev.field} (${ev.source})` : e(ev.field), e(ev.ai_value), e(ev.old_value), e(ev.new_value), e(ev.edited_by_initials), ts(ev.edited_at)];
+  });
+  return [...drafts, ...changes];
 }
 
 export function toCsv(headers, rows) {
-  const q = (v) => { const s = typeof v === 'number' ? (Number.isInteger(v) ? String(v) : v.toFixed(1)) : String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const q = (v) => { if (v == null) return ''; const s = typeof v === 'number' ? (Number.isInteger(v) ? String(v) : v.toFixed(1)) : String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   return [headers, ...rows].map((r) => r.map(q).join(',')).join('\n');
 }

@@ -5,7 +5,8 @@ import { Download, Loader2 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { useMe } from '@/hooks/useMe';
 import { fetchAll, fmtDateTime } from '@/lib/data';
-import { MEAS_HEADERS, TRAIL_HEADERS, ONE_DEC_COLS, measurementRows, trailRows, toCsv } from '@/lib/exportRows';
+import { MEAS_HEADERS, measurementRows, toCsv } from '@/lib/exportRows';
+import { buildWorkbook } from '@/lib/exportWorkbook';
 
 const { Scan, Nodule, EditEvent } = base44.entities;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -31,7 +32,7 @@ export default function Export() {
       fetchAll(Nodule, { scan: { $in: ids }, status: 'Accepted' }, 'nodule_label'),
       fetchAll(EditEvent, { scan: { $in: ids } }, 'edited_at'),
     ]);
-    return { scans, meas: measurementRows(scans, nodules, events), trail: trailRows(scans, events) };
+    return { scans, nodules, events };
   };
   const markExported = async (scans) => {
     if (!me.isReviewer) return;
@@ -42,15 +43,8 @@ export default function Export() {
 
   const downloadXlsx = async () => {
     setBusy('xlsx');
-    const { scans, meas, trail } = await gather();
-    const ws = XLSX.utils.aoa_to_sheet([MEAS_HEADERS, ...meas]);
-    meas.forEach((_, r) => ONE_DEC_COLS.forEach((c) => { const cell = ws[XLSX.utils.encode_cell({ r: r + 1, c })]; if (cell && cell.t === 'n') cell.z = '0.0'; }));
-    const versions = [...new Set(scans.map((s) => s.engine_version).filter(Boolean))].join(', ') || 'unknown';
-    const readme = XLSX.utils.aoa_to_sheet([[`Exported from LungMarker on ${today()} by ${me.initials}. For research use only. Not for clinical use. AI drafts by engine version ${versions}; every row was reviewed and approved by the person in 'Measured by'.`]]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Measurements');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([TRAIL_HEADERS, ...trail]), 'Edit trail');
-    XLSX.utils.book_append_sheet(wb, readme, 'Read me');
+    const { scans, nodules, events } = await gather();
+    const wb = buildWorkbook(XLSX, { scans, nodules, events, initials: me.initials, date: today() });
     XLSX.writeFile(wb, `lungmarker_export_${today()}.xlsx`);
     await markExported(scans);
     setBusy('');
@@ -58,8 +52,8 @@ export default function Export() {
 
   const downloadCsv = async () => {
     setBusy('csv');
-    const { scans, meas } = await gather();
-    const blob = new Blob([toCsv(MEAS_HEADERS, meas)], { type: 'text/csv;charset=utf-8' });
+    const { scans, nodules, events } = await gather();
+    const blob = new Blob([toCsv(MEAS_HEADERS, measurementRows(scans, nodules, events))], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = `lungmarker_export_${today()}.csv`; a.click();
     URL.revokeObjectURL(a.href);

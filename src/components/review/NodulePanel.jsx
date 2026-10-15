@@ -6,7 +6,7 @@ import PriorBox from '@/components/review/PriorBox';
 const b = 'h-8 px-3 rounded-md text-sm flex items-center gap-1.5 disabled:opacity-40';
 
 export default function NodulePanel(p) {
-  const { scan, nodules, sel, onSelect, locked, isReviewer, onAdd, adding, formProps, prior, followup, canAccept, onAccept, onRejectClick, onNext, allDone, onApprove, onReopen } = p;
+  const { scan, nodules, sel, onSelect, locked, isReviewer, onAdd, adding, formProps, prior, followup, canAccept, under4, onAccept, onRejectClick, onNext, allDone, onApprove, onReopen } = p;
   const approved = scan.review_status === 'Approved';
   return (
     <aside className="w-[35%] min-w-[420px] border-l border-slate-200 bg-white flex flex-col min-h-0">
@@ -25,10 +25,13 @@ export default function NodulePanel(p) {
             <NoduleForm n={sel} locked={locked} followup={followup} {...formProps} />
             {!locked && (
               <div className="flex gap-2">
-                <button onClick={onAccept} disabled={!canAccept} title={followup && !sel.match_to_prior ? 'Choose Match to prior first' : 'A'} className={`${b} bg-emerald-600 text-white hover:bg-emerald-700`}><Check className="w-4 h-4" />Accept <kbd className="text-[10px] opacity-70">A</kbd></button>
+                <button onClick={onAccept} disabled={!canAccept} title={under4 ? 'Long axis under 4 mm – not measured (Reject → Under 4 mm)' : followup && !sel.match_to_prior ? 'Choose Match to prior first' : 'A'} className={`${b} bg-emerald-600 text-white hover:bg-emerald-700`}><Check className="w-4 h-4" />Accept <kbd className="text-[10px] opacity-70">A</kbd></button>
                 <button onClick={onRejectClick} className={`${b} border border-rose-200 text-rose-700 hover:bg-rose-50`}><X className="w-4 h-4" />Reject <kbd className="text-[10px] opacity-70">R</kbd></button>
                 <button onClick={onNext} className={`${b} ml-auto border border-slate-200 hover:bg-slate-50`}>Next <kbd className="text-[10px] opacity-60">N</kbd><ChevronRight className="w-4 h-4" /></button>
               </div>
+            )}
+            {!locked && !canAccept && (under4 || (followup && !sel.match_to_prior)) && (
+              <p className="text-[11.5px] text-amber-700 -mt-2">{under4 ? 'Long axis is under 4 mm, so it is not measured. Reject it with reason "Under 4 mm", or correct the size.' : 'Choose Match to prior (or N/A) before accepting.'}</p>
             )}
             {followup && <PriorBox {...prior} chosen={sel.match_to_prior} suggested={formProps.aiSuggest?.label} />}
           </div>

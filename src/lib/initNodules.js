@@ -9,15 +9,16 @@ export async function initNodules(scan, findings, priorNodules) {
     const long = r1(f.long_axis_mm), short = r1(f.short_axis_mm);
     const vol = f.volume_mm3 == null ? null : Math.round(f.volume_mm3);
     const type = normType(f.type_guess);
+    const solid = type === 'Part-solid' && f.solid_component_mm != null ? r1(f.solid_component_mm) : null;
     const matchLabel = f.match ? priorNodules.find((n) => n.engine_finding_id === f.match.prior_finding_id)?.nodule_label || '' : '';
     return {
       scan: scan.id, engine_scan_id: scan.engine_scan_id, nodule_label: `N${i + 1}`, source: 'AI', engine_finding_id: f.finding_id,
       status: 'Pending', was_edited: false, lobe: f.lobe, slice_number: f.key_slice_number, key_slice_z: f.key_slice_z, type,
-      long_axis_mm: long, short_axis_mm: short, mean_diameter_mm: meanOf(long, short), volume_mm3: vol, outline_confirmed: false,
+      long_axis_mm: long, short_axis_mm: short, mean_diameter_mm: meanOf(long, short), solid_component_mm: solid, volume_mm3: vol, outline_confirmed: false,
       match_to_prior: '', key_contour_px: contour, long_axis_px: f.long_axis_px, short_axis_px: f.short_axis_px,
       flags: f.flags || [], ai_confidence: f.confidence,
       ai_draft: {
-        lobe: f.lobe, type, long, short, volume: vol, key_slice_number: f.key_slice_number, key_slice_z: f.key_slice_z, contour,
+        lobe: f.lobe, type, long, short, solid, volume: vol, key_slice_number: f.key_slice_number, key_slice_z: f.key_slice_z, contour,
         long_axis_px: f.long_axis_px, short_axis_px: f.short_axis_px, match: f.match || null, match_label: matchLabel,
       },
     };
