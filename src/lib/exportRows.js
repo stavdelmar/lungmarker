@@ -12,7 +12,7 @@ export const MIN_LONG_AXIS_MM = 4; // Daniel measures nodules of 4 mm and up
 
 // Group rows by scan (patient, date, Baseline before Follow-up 1, …), then N1, N2, … within the scan.
 const tpRank = (t = '') => (t === 'Baseline' ? 0 : parseInt(String(t).replace(/\D/g, ''), 10) || 99);
-function sortKey(s, n) { return `${s.patient_id}|${d10(s.scan_date)}|${String(tpRank(s.timepoint)).padStart(3, '0')}|${String(n?.nodule_label || '').replace(/\d+/, (d) => d.padStart(4, '0'))}`; }
+export function sortKey(s, n) { return `${s.patient_id}|${d10(s.scan_date)}|${String(tpRank(s.timepoint)).padStart(3, '0')}|${String(n?.nodule_label || '').replace(/\d+/, (d) => d.padStart(4, '0'))}`; }
 
 export function measurementRows(scans, nodules, events) {
   const sMap = Object.fromEntries(scans.map((s) => [s.id, s]));

@@ -8,5 +8,5 @@ on one patient, Baseline + Follow-up 1, with synthetic AI findings in the engine
     python3 tests/export/check.py tests/export/after     # needs openpyxl
 
 `before.report.txt` = result on the code as Base44 generated it (10/13, plus empty-text cells found in the raw XML).
-`after.report.txt` = result after the fixes (13/13).
+`after.report.txt` = result now (18 checks: the 16 sheet rules + daily "only new rows" exports without duplicates + updated rows flagged in Read me).
 Not covered here: clicking through the real UI. That needs scan data from the engine and is tested separately.

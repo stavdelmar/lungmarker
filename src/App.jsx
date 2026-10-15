@@ -16,7 +16,6 @@ import Layout from '@/components/Layout';
 import Worklist from '@/pages/Worklist';
 import Review from '@/pages/Review';
 import Results from '@/pages/Results';
-import Export from '@/pages/Export';
 import Settings from '@/pages/Settings';
 
 const AuthenticatedApp = () => {
@@ -45,7 +44,7 @@ const AuthenticatedApp = () => {
           <Route path="/" element={<Worklist />} />
           <Route path="/review/:id" element={<Review />} />
           <Route path="/results" element={<Results />} />
-          <Route path="/export" element={<Export />} />
+          <Route path="/export" element={<Navigate to="/results" replace />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
       </Route>

@@ -2,7 +2,7 @@ import { base44 } from '@/api/base44Client';
 import { meanOf } from '@/lib/geometry';
 
 const AI_KEY = { lobe: 'lobe', type: 'type', slice_number: 'key_slice_number', long_axis_mm: 'long', short_axis_mm: 'short', solid_component_mm: 'solid', volume_mm3: 'volume', key_contour_px: 'contour', match_to_prior: 'match_label' };
-const SKIP = ['long_axis_px', 'short_axis_px', 'mean_diameter_mm', 'was_edited', 'outline_confirmed_by_initials', 'outline_confirmed_at', 'key_slice_z', 'volume_stale'];
+const SKIP = ['exported_at', 'changed_after_export', 'long_axis_px', 'short_axis_px', 'mean_diameter_mm', 'was_edited', 'outline_confirmed_by_initials', 'outline_confirmed_at', 'key_slice_z', 'volume_stale'];
 export const AI_FIELDS = ['lobe', 'type', 'slice_number', 'long_axis_mm', 'short_axis_mm', 'solid_component_mm', 'volume_mm3', 'outline'];
 
 export function fmtVal(key, v) {
@@ -46,6 +46,7 @@ export async function saveNodule(scan, nodule, patch, me, { source } = {}) {
   });
   if (!events.length) return;
   if (events.some((e) => AI_FIELDS.includes(e.field))) p.was_edited = true;
+  if (nodule.exported_at) p.changed_after_export = true; // re-export it next time
   await base44.entities.Nodule.update(nodule.id, p);
   await base44.entities.EditEvent.bulkCreate(events);
 }
@@ -54,5 +55,9 @@ export async function approveScan(scan, secs, me) {
   const patch = { review_status: 'Approved', approved_by_email: me.user.email, approved_by_initials: me.initials, approved_at: new Date().toISOString(), active_seconds: secs, minutes_on_scan: Math.ceil(secs / 60) };
   await base44.entities.Scan.update(scan.id, patch);
   await logEvent(scan, null, 'scan_approved', 'In review', 'Approved', me);
+  // Re-approval after a reopen can change Minutes on scan → already-exported rows of this scan go out again.
+  const exported = scan.minutes_on_scan != null && scan.minutes_on_scan !== patch.minutes_on_scan
+    ? (await base44.entities.Nodule.filter({ scan: scan.id, status: 'Accepted' }, { limit: 500 })).items.filter((n) => n.exported_at) : [];
+  if (exported.length) await base44.entities.Nodule.bulkUpdate(exported.map((n) => ({ id: n.id, changed_after_export: true })));
   return patch;
 }

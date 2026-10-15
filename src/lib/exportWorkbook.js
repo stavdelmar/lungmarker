@@ -17,7 +17,13 @@ export function buildWorkbook(XLSX, { scans, nodules, events, initials, date }) 
   datesToExcel(XLSX, ws, meas.length);
   meas.forEach((_, r) => ONE_DEC_COLS.forEach((c) => { const cell = ws[XLSX.utils.encode_cell({ r: r + 1, c })]; if (cell && cell.t === 'n') cell.z = '0.0'; }));
   const versions = [...new Set(scans.map((s) => s.engine_version).filter(Boolean))].join(', ') || 'unknown';
-  const readme = XLSX.utils.aoa_to_sheet([[`Exported from LungMarker on ${date} by ${initials}. For research use only. Not for clinical use. AI drafts by engine version ${versions}; every row was reviewed and approved by the person in 'Measured by'.`]]);
+  const sMap = Object.fromEntries(scans.map((s) => [s.id, s]));
+  const updated = nodules.filter((n) => n.changed_after_export && sMap[n.scan]).map((n) => { const s = sMap[n.scan]; return [`${s.patient_id} · ${String(s.scan_date).slice(0, 10)} · ${s.timepoint} · ${n.nodule_label}`]; });
+  const readme = XLSX.utils.aoa_to_sheet([
+    [`Exported from LungMarker on ${date} by ${initials}. For research use only. Not for clinical use. AI drafts by engine version ${versions}; every row was reviewed and approved by the person in 'Measured by'.`],
+    [`${meas.length} row(s): ${meas.length - updated.length} new, ${updated.length} updated.`],
+    ...(updated.length ? [[], ['UPDATED ROWS — already in the master sheet from an earlier export. Replace the old row, do not add a second one:'], ...updated] : []),
+  ]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Measurements');
   const trail = trailRows(scans, events, nodules);

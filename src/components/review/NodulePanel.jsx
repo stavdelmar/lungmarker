@@ -1,4 +1,5 @@
 import { Plus, Check, X, ChevronRight, Lock } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import NoduleList from '@/components/review/NoduleList';
 import NoduleForm from '@/components/review/NoduleForm';
 import PriorBox from '@/components/review/PriorBox';
@@ -41,8 +42,9 @@ export default function NodulePanel(p) {
         {approved ? (
           <div className="flex items-center gap-2 text-sm">
             <Lock className="w-4 h-4 text-emerald-700" />
-            <span>Approved by <b className="font-mono">{scan.approved_by_initials}</b> · <span className="font-mono text-xs">{new Date(scan.approved_at).toLocaleString('en-GB')}</span> · <span className="font-mono">{scan.minutes_on_scan}</span> min</span>
-            {isReviewer && <button onClick={onReopen} className="ml-auto h-8 px-3 rounded-md border border-slate-300 bg-white text-sm hover:bg-slate-100">Reopen</button>}
+            <span>Saved · approved by <b className="font-mono">{scan.approved_by_initials}</b> · <span className="font-mono text-xs">{new Date(scan.approved_at).toLocaleString('en-GB')}</span> · <span className="font-mono">{scan.minutes_on_scan}</span> min</span>
+            <Link to="/results" className="ml-auto text-teal-700 hover:underline whitespace-nowrap">See in Results →</Link>
+            {isReviewer && <button onClick={onReopen} className="h-8 px-3 rounded-md border border-slate-300 bg-white text-sm hover:bg-slate-100">Reopen</button>}
           </div>
         ) : isReviewer ? (
           <button onClick={onApprove} disabled={!allDone} className="w-full h-9 rounded-md bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-40">

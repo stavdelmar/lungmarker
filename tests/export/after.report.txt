@@ -7,12 +7,14 @@ PASS  Volume filled for every confirmed outline, empty otherwise                
 PASS  Match to prior: Daniel's pick or N/A, never AI-filled, empty on Baseline  │ after AI draft: N1=(empty) (AI suggests N1), N2=(empty) (AI suggests nothing) → exported: N1 (Base)=(empty), N2 (Base)=(empty), N1 (Foll)='N1', N2 (Foll)='N/A'
 PASS  Solid component empty for Solid/Ground-glass, filled for Part-solid       │ N1 (Base) Solid → (empty); N2 (Base) Ground-glass → (empty); N1 (Foll) Part-solid → 8.2; N2 (Foll) Solid → (empty)
 PASS  Minutes on scan = built-in timer (active seconds, rounded up)             │ Baseline: timer 1980 s → 33 min; Follow-up 1: timer 1500 s → 25 min
-PASS  Blank cells truly empty (no '', 0, null in the file)                      │ 9 blank cells, none written into the file
+PASS  Blank cells truly empty (no '', 0, null in the file)                      │ 8 blank cells, none written into the file
 PASS  Only nodules ≥ 4 mm (long axis)                                           │ smallest long axis: 4.4 mm
-PASS  Notes = Daniel's own text only                                            │ Base N1: (empty); Base N2: (empty); Foll N1: (empty); Foll N2: 'New since prior, faint'
+PASS  Notes = Daniel's own text only                                            │ Base N1: 'Clear edges'; Base N2: (empty); Foll N1: (empty); Foll N2: 'New since prior, faint'
 PASS  Edit trail: AI draft for every exported nodule                            │ 4 'AI draft' rows; AI value column filled on changed fields: True; nodules accepted unchanged: 0
 PASS  Edit trail: review result per nodule (moved from Notes)                   │ Base N1: AI-assisted; accepted unchanged; Base N2: AI-assisted; edited: long axis, outline, volume; Foll N1: AI-assisted; accepted unchanged; Foll N2: AI-assisted; accepted unchanged
 PASS  Edit trail: Daniel's changes (old → new, who, when)                       │ fields changed: AI draft, Review result, long_axis_mm, match_to_prior, notes, outline (points moved by hand; volume recomputed), outline_confirmed, reject_reason, scan_approved, status, volume_mm3
-PASS  Edit trail: who approved each scan                                        │ Baseline: Approved by DR at 2026-10-15 16:14; Follow-up 1: Approved by DR at 2026-10-15 16:14
+PASS  Edit trail: who approved each scan                                        │ Baseline: Approved by DR at 2026-10-15 16:34; Follow-up 1: Approved by DR at 2026-10-15 16:34
+PASS  Daily export: no duplicates, changed row re-exported, nothing twice       │ Oct 15: Baseline N1, Baseline N2 · Oct 16: Follow-up 1 N1, Follow-up 1 N2 · Oct 17: Baseline N1 · Oct 18: (nothing new)
+PASS  Re-exported row is flagged as UPDATED in the Read me sheet                │ Oct 17 Read me: 1 row(s): 0 new, 1 updated. / UPDATED ROWS — already in the master sheet from an earlier export. Replace the old row, do not add a second one: / RIDER-TEST · 2006-01-10 · Baseline · N1
 
-16/16 pass
+18/18 pass

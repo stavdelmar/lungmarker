@@ -70,6 +70,16 @@
     "volume_mm3": {
       "type": "number"
     },
+    "exported_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this row was last exported to Excel by a reviewer"
+    },
+    "changed_after_export": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when the row changed after it was exported, so it goes into the next export again"
+    },
     "volume_stale": {
       "type": "boolean",
       "default": false,

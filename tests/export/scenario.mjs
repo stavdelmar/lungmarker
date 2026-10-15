@@ -6,6 +6,8 @@ import { base44 } from '@/api/base44Client';
 import { initNodules } from '@/lib/initNodules';
 import { saveNodule, approveScan } from '@/lib/edits';
 import { buildWorkbook } from '@/lib/exportWorkbook';
+import { selectForExport, markExported } from '@/lib/exportSelect';
+import { measurementRows } from '@/lib/exportRows';
 import { lenMm, meanOf, volumeAfterKeyEdit } from '@/lib/geometry';
 
 const { Scan, Nodule, EditEvent } = base44.entities;
@@ -57,6 +59,21 @@ export async function runScenario() {
   await save(base, 'N4', { status: 'Accepted' });
   await approveScan(base, 1980, me); // timer: 33:00 of active time
 
+  // Day 1: Daniel presses "Export to Excel" in Results with "Only rows not exported yet" (the default).
+  const daily = [];
+  const exportPending = async (day) => {
+    const scans = (await Scan.filter({ review_status: 'Approved' })).items;
+    const nodules = (await Nodule.filter({ scan: { $in: scans.map((x) => x.id) }, status: 'Accepted' })).items;
+    const events = (await EditEvent.filter({ scan: { $in: scans.map((x) => x.id) } }, { sort: 'edited_at' })).items;
+    const sel = selectForExport({ scans, nodules, events, onlyPending: true });
+    const rows = measurementRows(sel.scans, sel.nodules, sel.events);
+    const wbDay = buildWorkbook(XLSX, { ...sel, initials: 'DR', date: `2026-10-${day}` });
+    const readme = XLSX.utils.sheet_to_json(wbDay.Sheets['Read me'], { header: 1 }).map((r) => r[0]).filter(Boolean).slice(1);
+    await markExported(sel.nodules, `2026-10-${day}T18:00:00.000Z`);
+    daily.push({ day: `Oct ${day}`, rows: rows.map((r) => `${r[2]} ${r[5]}`), readme });
+  };
+  await exportPending(15);
+
   // ---------- Follow-up 1 (same patient) ----------
   const fu = await Scan.create({ engine_scan_id: 'RIDER-TEST_retest', patient_id: 'RIDER-TEST', scan_date: '2006-01-10', timepoint: 'Follow-up 1', series_number: 4, slice_thickness_mm: 1.25, n_slices: 282, prior_engine_scan_id: 'RIDER-TEST_test', review_status: 'Not started', active_seconds: 0, engine_version: '0.3.0' });
   const prior = (await Nodule.filter({ scan: base.id })).items;
@@ -76,6 +93,13 @@ export async function runScenario() {
   await save(fu, 'N2', { notes: 'New since prior, faint' });
   await save(fu, 'N2', { status: 'Accepted' });
   await approveScan(fu, 1500, me); // 25:00
+  // Day 2: export again (default "only new"): should hold only the follow-up rows.
+  await exportPending(16);
+  // Day 3: Daniel adds a note to an already-exported Baseline row → it changed, so it goes out again; nothing else does.
+  await save(base, 'N1', { notes: 'Clear edges' });
+  await exportPending(17);
+  // Day 4: nothing changed → nothing to export.
+  await exportPending(18);
 
   // ---------- Export, exactly like the Export page ----------
   const scans = (await Scan.filter({ review_status: 'Approved' }, { sort: 'patient_id' })).items;
@@ -83,5 +107,5 @@ export async function runScenario() {
   const nodules = (await Nodule.filter({ scan: { $in: ids }, status: 'Accepted' }, { sort: 'nodule_label' })).items;
   const events = (await EditEvent.filter({ scan: { $in: ids } }, { sort: 'edited_at' })).items;
   const wb = buildWorkbook(XLSX, { scans, nodules, events, initials: 'DR', date: '2026-10-15' });
-  return { wb, afterInit, all: { scans, nodules: (await Nodule.filter({})).items } };
+  return { wb, afterInit, daily, all: { scans, nodules: (await Nodule.filter({})).items } };
 }

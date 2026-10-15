@@ -135,6 +135,15 @@ check("Edit trail: Daniel's changes (old → new, who, when)", any(t["Changed by
       "fields changed: " + ", ".join(sorted(f for f in fields if f)))
 check("Edit trail: who approved each scan", len(approved) == len(scans), "; ".join(f"{t['Timepoint']}: {t['New value']} by {t['Changed by']} at {t['Changed at']}" for t in approved))
 
+# daily "only rows not exported yet" exports: every row exactly once, changed rows again
+daily = state["daily"]
+seen = [r for d in daily[:2] for r in d["rows"]]
+ok = (sorted(seen) == sorted(set(seen)) and len(seen) == 4 and daily[2]["rows"] == ["Baseline N1"] and daily[3]["rows"] == [])
+check("Daily export: no duplicates, changed row re-exported, nothing twice", ok,
+      " · ".join(f"{d['day']}: {', '.join(d['rows']) or '(nothing new)'}" for d in daily))
+check("Re-exported row is flagged as UPDATED in the Read me sheet", any("UPDATED" in l for l in daily[2]["readme"]) and not any("UPDATED" in l for l in daily[1]["readme"]),
+      f"Oct 17 Read me: {' / '.join(daily[2]['readme'])}")
+
 w = max(len(n) for n, _, _ in results)
 for n, ok, ev in results:
     print(f"{'PASS' if ok else 'FAIL'}  {n.ljust(w)}  │ {ev}")

@@ -190,7 +190,7 @@ export default function Review() {
 
   const approve = async () => {
     await approveScan(scan, timer.getSecs(), me);
-    qc.invalidateQueries({ queryKey: ['scan', id] });
+    qc.invalidateQueries({ queryKey: ['scan', id] }); qc.invalidateQueries({ queryKey: ['approvedScans'] }); qc.invalidateQueries({ queryKey: ['resultNodules'] });
   };
   const reopen = async () => {
     await Scan.update(scan.id, { review_status: 'In review' });
