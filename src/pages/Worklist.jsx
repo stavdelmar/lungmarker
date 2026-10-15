@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
@@ -6,11 +6,19 @@ import { engine } from '@/api/engine';
 import { useSettings } from '@/hooks/useAppData';
 import { useMe } from '@/hooks/useMe';
 import StatusBadge from '@/components/StatusBadge';
-import EngineOffline from '@/components/EngineOffline';
 import { RefreshCw, Loader2 } from 'lucide-react';
 
 const { Scan } = base44.entities;
 const CHIPS = ['Not started', 'In review', 'Approved'];
+const RESYNC_AFTER_MS = 5 * 60 * 1000; // also re-sync when Daniel comes back to the tab after 5+ minutes
+
+function ago(t, now) {
+  const m = Math.floor((now - t) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h} h ago` : new Date(t).toLocaleDateString('en-GB');
+}
 
 export default function Worklist() {
   const nav = useNavigate();
@@ -21,14 +29,22 @@ export default function Worklist() {
   const [syncing, setSyncing] = useState(false);
   const [syncErr, setSyncErr] = useState(null);
   const [syncMsg, setSyncMsg] = useState('');
+  const [lastSync, setLastSync] = useState(null);
+  const [now, setNow] = useState(Date.now());
+  const busyRef = useRef(false);
+  const lastRef = useRef(0);
 
   const scansQ = useQuery({ queryKey: ['scans', chip], queryFn: async () => (await Scan.filter(chip ? { review_status: chip } : {}, { sort: 'patient_id', limit: 300 })).items });
   const countsQ = useQuery({ queryKey: ['scanCounts'], queryFn: async () => ({ total: await Scan.count({}), approved: await Scan.count({ review_status: 'Approved' }) }) });
 
-  const sync = async () => {
-    setSyncing(true); setSyncErr(null); setSyncMsg('');
+  // Adds scans the engine has that the app doesn't (never touches existing ones). Runs by itself when the
+  // Worklist opens (reviewers only: only they can create scans); the refresh button is a manual fallback.
+  const base = settings?.engine_base_url;
+  const sync = useCallback(async () => {
+    if (busyRef.current || !base) return;
+    busyRef.current = true; setSyncing(true); setSyncErr(null);
     try {
-      const { scans = [] } = await engine.scans(settings?.engine_base_url);
+      const { scans = [] } = await engine.scans(base);
       const existing = new Set((await Scan.list({ distinct: 'engine_scan_id', limit: 5000 })).items);
       const missing = scans.filter((s) => !existing.has(s.scan_id)).map((s) => ({
         engine_scan_id: s.scan_id, patient_id: s.patient_id, scan_date: s.scan_date?.slice(0, 10), timepoint: s.timepoint,
@@ -36,13 +52,24 @@ export default function Worklist() {
         prior_engine_scan_id: s.prior_scan_id || '', review_status: 'Not started', active_seconds: 0, ai_findings_count: s.n_findings,
       }));
       if (missing.length) await Scan.bulkCreate(missing);
-      setSyncMsg(missing.length ? `${missing.length} new scan${missing.length > 1 ? 's' : ''} added` : 'Already up to date');
+      setSyncMsg(missing.length ? `${missing.length} new scan${missing.length > 1 ? 's' : ''}` : '');
+      const t = Date.now(); lastRef.current = t; setLastSync(t); setNow(t);
       qc.invalidateQueries({ queryKey: ['scans'] }); qc.invalidateQueries({ queryKey: ['scanCounts'] });
     } catch (e) {
       setSyncErr(e.message);
     }
-    setSyncing(false);
-  };
+    busyRef.current = false; setSyncing(false);
+  }, [base, qc]);
+
+  // Sync on open, and again when the tab comes back into view after a while.
+  useEffect(() => { if (me.isReviewer && base) sync(); }, [me.isReviewer, base, sync]);
+  useEffect(() => {
+    if (!me.isReviewer) return undefined;
+    const onVisible = () => { if (document.visibilityState === 'visible' && Date.now() - lastRef.current > RESYNC_AFTER_MS) sync(); };
+    const tick = setInterval(() => setNow(Date.now()), 30000);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(tick); document.removeEventListener('visibilitychange', onVisible); };
+  }, [me.isReviewer, sync]);
 
   const rows = scansQ.data || [];
   return (
@@ -52,16 +79,26 @@ export default function Worklist() {
           <h1 className="text-xl font-semibold tracking-tight">Worklist</h1>
           <p className="text-xs text-slate-500 mt-1 font-mono">{countsQ.data ? `${countsQ.data.approved} of ${countsQ.data.total} scans approved` : '…'}</p>
         </div>
-        <div className="flex items-center gap-3">
-          {syncMsg && <span className="text-xs text-slate-500">{syncMsg}</span>}
-          {me.isReviewer && (
-            <button onClick={sync} disabled={syncing} className="h-8 px-3 rounded-md bg-slate-900 text-white text-sm flex items-center gap-2 hover:bg-slate-800 disabled:opacity-60">
-              {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Sync from engine
-            </button>
-          )}
-        </div>
+        {me.isReviewer && (
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            {!base ? (
+              <span>AI engine not set up{me.isAdmin ? ' (Settings)' : ''}</span>
+            ) : syncErr ? (
+              <span className="text-amber-700" title={syncErr}>Couldn't reach the AI engine · showing saved scans</span>
+            ) : syncing && !lastSync ? (
+              <span>Checking for new scans…</span>
+            ) : lastSync ? (
+              <span>Updated {ago(lastSync, now)}{syncMsg && <span className="text-teal-700 font-medium"> · {syncMsg}</span>}</span>
+            ) : null}
+            {base && (
+              <button onClick={sync} disabled={syncing} title="Check for new scans now" aria-label="Check for new scans now"
+                className="w-7 h-7 grid place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-60">
+                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
-      {syncErr && <div className="mt-4"><EngineOffline message={syncErr} onRetry={sync} /></div>}
       <div className="flex gap-2 mt-5">
         {CHIPS.map((c) => (
           <button key={c} onClick={() => setChip(chip === c ? null : c)}
@@ -86,7 +123,7 @@ export default function Worklist() {
               </tr>
             ))}
             {!scansQ.isLoading && rows.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-400 text-sm">No scans yet{me.isReviewer ? ' — use "Sync from engine".' : '.'}</td></tr>
+              <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-400 text-sm">{syncing ? 'Checking the AI engine for scans…' : 'No scans yet.'}</td></tr>
             )}
             {scansQ.isLoading && <tr><td colSpan={7} className="px-4 py-12 text-center"><Loader2 className="w-4 h-4 animate-spin inline text-slate-400" /></td></tr>}
           </tbody>
