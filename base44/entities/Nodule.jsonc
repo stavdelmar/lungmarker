@@ -70,6 +70,10 @@
     "volume_mm3": {
       "type": "number"
     },
+    "contour_edits": {
+      "type": "object",
+      "description": "Outlines Daniel changed on slices other than the key slice: {\"<z>\": [[x,y],...]}; [] = erased on that slice"
+    },
     "exported_at": {
       "type": "string",
       "format": "date-time",

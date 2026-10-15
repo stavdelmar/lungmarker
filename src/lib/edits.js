@@ -8,6 +8,7 @@ export const AI_FIELDS = ['lobe', 'type', 'slice_number', 'long_axis_mm', 'short
 export function fmtVal(key, v) {
   if (v == null || v === '') return '';
   if (key === 'key_contour_px') return `${v.length} points`;
+  if (key === 'contour_edits') return `${Object.keys(v).length} other slice(s) edited`;
   if (typeof v === 'object') return JSON.stringify(v);
   return String(v);
 }
@@ -27,7 +28,8 @@ export async function saveNodule(scan, nodule, patch, me, { source } = {}) {
   const p = { ...patch };
   if ('long_axis_mm' in p || 'short_axis_mm' in p)
     p.mean_diameter_mm = meanOf(p.long_axis_mm ?? nodule.long_axis_mm, p.short_axis_mm ?? nodule.short_axis_mm);
-  const outlineChanged = 'key_contour_px' in p && JSON.stringify(p.key_contour_px) !== JSON.stringify(nodule.key_contour_px);
+  const outlineChanged = ('key_contour_px' in p && JSON.stringify(p.key_contour_px) !== JSON.stringify(nodule.key_contour_px))
+    || ('contour_edits' in p && JSON.stringify(p.contour_edits) !== JSON.stringify(nodule.contour_edits));
   if (outlineChanged && nodule.outline_confirmed && !('outline_confirmed' in p)) {
     p.outline_confirmed = false; p.outline_confirmed_by_initials = ''; p.outline_confirmed_at = null;
   }
@@ -36,11 +38,12 @@ export async function saveNodule(scan, nodule, patch, me, { source } = {}) {
   Object.keys(p).forEach((k) => {
     if (SKIP.includes(k)) return;
     if (JSON.stringify(nodule[k] ?? null) === JSON.stringify(p[k] ?? null)) return;
-    const field = k === 'key_contour_px' ? 'outline' : k;
+    const field = k === 'key_contour_px' || k === 'contour_edits' ? 'outline' : k;
     // An outline change is described by how it was made, since "16 points → 16 points" says nothing.
     const newV = field === 'outline' ? `${fmtVal(k, p[k])}, ${source || 'points moved by hand'}` : fmtVal(k, p[k]);
+    const oldV = k === 'contour_edits' ? fmtVal(k, nodule[k] || {}) : fmtVal(k, nodule[k]);
     events.push({
-      ...base, field, ai_value: fmtVal(k, nodule.ai_draft?.[AI_KEY[k]]), old_value: fmtVal(k, nodule[k]), new_value: newV,
+      ...base, field, ai_value: fmtVal(k, nodule.ai_draft?.[AI_KEY[k]]), old_value: oldV, new_value: newV,
       ...(source && field === 'outline' ? { source } : {}),
     });
   });

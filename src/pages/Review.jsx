@@ -9,7 +9,8 @@ import { useSettings, useHealth } from '@/hooks/useAppData';
 import { useScanTimer } from '@/hooks/useScanTimer';
 import { initNodules } from '@/lib/initNodules';
 import { saveNodule, logEvent, approveScan } from '@/lib/edits';
-import { axesFromOutline, lenMm, meanOf, findingPatch, sliceStepMm, volumeAfterKeyEdit, volumeFromContours } from '@/lib/geometry';
+import { axesFromOutline, lenMm, meanOf, findingPatch, sliceStepMm, volumeAfterKeyEdit, volumeFromContours, sliceContour, allSliceContours, outlinedSlices, slicePatch } from '@/lib/geometry';
+import { brushEdit, lassoToPoly } from '@/lib/maskEdit';
 import { MIN_LONG_AXIS_MM } from '@/lib/exportRows';
 import EngineOffline from '@/components/EngineOffline';
 import ReviewHeader from '@/components/review/ReviewHeader';
@@ -55,6 +56,8 @@ export default function Review() {
   const [z, setZRaw] = useState(0);
   const [win, setWin] = useState('lung');
   const [mode, setMode] = useState(null);
+  const [brushMm, setBrushMm] = useState(1.5);
+  const undoRef = useRef([]);
   const [clicks, setClicks] = useState([]);
   const [showRejected, setShowRejected] = useState(false);
   const [draft, setDraft] = useState(null);
@@ -100,7 +103,7 @@ export default function Review() {
   const shapes = useMemo(() => nodules.filter((n) => showRejected || n.status !== 'Rejected').map((n) => {
     let polys = [];
     if (z === n.key_slice_z) polys = [(n.id === selId ? draft?.key_contour_px : n.key_contour_px) || []];
-    else if (n.engine_finding_id) polys = findingsById[n.engine_finding_id]?.contours?.[String(z)] || [];
+    else polys = [sliceContour(n, z, findingsById[n.engine_finding_id]?.contours)];
     return { n, polys };
   }), [nodules, showRejected, z, selId, draft, findingsById]);
 
@@ -130,13 +133,49 @@ export default function Review() {
     } else save({ [h.kind]: d[h.kind], [h.kind === 'long_axis_px' ? 'long_axis_mm' : 'short_axis_mm']: lenMm(d[h.kind], sp) });
   };
 
+  // ---- Corrections without an engine: erase (E), draw (D), undo (Ctrl+Z) ----
+  const brushPx = brushMm / (sp[1] || 1);
+  const OUTLINE_FIELDS = ['key_contour_px', 'contour_edits', 'key_slice_z', 'slice_number', 'long_axis_px', 'short_axis_px', 'long_axis_mm', 'short_axis_mm', 'volume_mm3', 'volume_stale'];
+  // Replace nodule n's outline on slice zz; axes (key slice) and volume update at once in the browser.
+  const editSlice = async (n, zz, newPoly, source) => {
+    const patch = slicePatch(n, zz, newPoly, { sp, dz, engineContours: contoursOf(n), slices: meta.slices });
+    undoRef.current.push({ id: n.id, prev: Object.fromEntries(OUTLINE_FIELDS.map((f) => [f, n[f] ?? null])) });
+    if (undoRef.current.length > 30) undoRef.current.shift();
+    await saveNodule(scan, n, patch, me, { source });
+    await refresh();
+  };
+  const undo = async () => {
+    const last = undoRef.current.pop();
+    if (!last) { setNotice('Nothing to undo.'); return; }
+    const fresh = await Nodule.get(last.id);
+    await saveNodule(scan, fresh, last.prev, me, { source: 'undo' });
+    await refresh();
+  };
+  const onStrokeEnd = (points, e) => {
+    if (locked) return;
+    if (mode === 'erase' && sel) {
+      const before = sliceContour(sel, z, contoursOf(sel));
+      if (!before.length && !e.shiftKey) { setNotice(`${sel.nodule_label} has no outline on this slice. Shift + drag paints one, or press D to draw it.`); return; }
+      const after = brushEdit(before, points, brushPx, e.shiftKey ? 'paint' : 'erase');
+      if (JSON.stringify(after) !== JSON.stringify(before)) editSlice(sel, z, after, e.shiftKey ? 'brush: painted' : 'brush: erased');
+    } else if (mode === 'draw' && sel) {
+      const poly = lassoToPoly(points);
+      if (poly) editSlice(sel, z, poly, 'outline drawn by hand');
+    } else if (mode === 'add') {
+      const poly = lassoToPoly(points);
+      if (!poly) return;
+      createAdded({ key_contour_px: poly, ...axesFromOutline(poly, sp), volume_mm3: volumeFromContours({}, sp, dz, z, poly) });
+      setMode('draw'); setClicks([]);
+    }
+  };
+
   const createAdded = async (geom) => {
     const maxN = Math.max(0, ...nodules.map((n) => parseInt(String(n.nodule_label).slice(1), 10) || 0));
     const label = `N${maxN + 1}`;
     const rec = await Nodule.create({
       scan: scan.id, engine_scan_id: sid, nodule_label: label, source: 'Added by reviewer', engine_finding_id: '', status: 'Pending',
       was_edited: false, lobe: '', type: 'Solid', slice_number: meta.slices?.find((s) => s.z === z)?.slice_number ?? z + 1, key_slice_z: z,
-      outline_confirmed: false, match_to_prior: '', flags: [], ai_draft: {}, key_contour_px: [], volume_stale: !geom.volume_mm3, ...geom,
+      outline_confirmed: false, match_to_prior: '', flags: [], ai_draft: {}, key_contour_px: [], contour_edits: {}, volume_stale: false, ...geom,
       mean_diameter_mm: meanOf(geom.long_axis_mm, geom.short_axis_mm),
     });
     await logEvent(scan, rec, 'added', '', label, me);
@@ -199,11 +238,13 @@ export default function Review() {
   };
 
   const keys = useRef();
-  keys.current = { accept, next, canAct: !locked && !!sel, reject: () => setRejectOpen(true), step, quick: !locked && !!sel && refineOk && !!meta, setMode, jump: () => sel && setZ(sel.key_slice_z) };
+  keys.current = { accept, next, canAct: !locked && !!sel, reject: () => setRejectOpen(true), step, quick: !locked && !!sel && refineOk && !!meta, edit: !locked && !!sel && !!meta, setMode, undo, setBrushMm, jump: () => sel && setZ(sel.key_slice_z) };
   useEffect(() => {
     const h = (e) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.ctrlKey || e.metaKey) return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
       const k = keys.current;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { if (k.edit) { e.preventDefault(); k.undo(); } return; }
+      if (e.ctrlKey || e.metaKey) return;
       if (e.key === 'ArrowUp') { e.preventDefault(); k.step(-1); }
       else if (e.key === 'ArrowDown') { e.preventDefault(); k.step(1); }
       else if (e.key === 'Escape') { setMode(null); setClicks([]); }
@@ -212,6 +253,10 @@ export default function Review() {
       else if (k.canAct && e.key.toLowerCase() === 'r') k.reject();
       else if (k.quick && e.key.toLowerCase() === 't') { k.jump(); k.setMode((m) => (m === 'trim' ? null : 'trim')); }
       else if (k.quick && e.key.toLowerCase() === 'g') { k.jump(); k.setMode((m) => (m === 'grow' ? null : 'grow')); }
+      else if (k.edit && e.key.toLowerCase() === 'e') k.setMode((m) => (m === 'erase' ? null : 'erase'));
+      else if (k.edit && e.key.toLowerCase() === 'd') k.setMode((m) => (m === 'draw' ? null : 'draw'));
+      else if (e.key === '[') k.setBrushMm((b) => Math.max(0.5, Math.round((b - 0.5) * 10) / 10));
+      else if (e.key === ']') k.setBrushMm((b) => Math.min(6, Math.round((b + 0.5) * 10) / 10));
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
@@ -229,10 +274,12 @@ export default function Review() {
       {mode === 'fix' && <span>Click inside the nodule = part of nodule · Shift+click = not nodule · <span className="font-mono">{clicks.length}</span> points</span>}
       {mode === 'trim' && <span><b>Trim −</b> · click on a vessel tail or anything that is not nodule; the AI redraws at once. Click again to trim more. Esc when done.</span>}
       {mode === 'grow' && <span><b>Grow +</b> · click on nodule tissue the outline missed; the AI redraws at once. Esc when done.</span>}
-      {mode === 'add' && <span>{refineOk ? 'Click on the nodule the AI missed.' : `Click the long axis ends, then the short axis ends (${clicks.length}/4).`}</span>}
+      {mode === 'erase' && <span><b>Erase</b> · drag over the part to cut away (e.g. a vessel tail). A piece cut off from the nodule disappears. Shift + drag paints back · brush <span className="font-mono">{brushMm} mm</span> ([ ]) · Ctrl+Z undo · works on any slice · Esc when done</span>}
+      {mode === 'draw' && <span><b>Draw</b> · drag around the nodule on this slice to replace its outline here. Scroll to the next slice and draw again. Ctrl+Z undo · Esc when done</span>}
+      {mode === 'add' && <span>{refineOk ? 'Click on the nodule the AI missed, or drag around it to outline it yourself.' : `Drag around the missed nodule to outline it (then draw it on its other slices), or click the long axis ends, then the short axis ends (${clicks.length}/4).`}</span>}
       {mode === 'fix' && <button disabled={!clicks.length || busy} onClick={sendFix} className="ml-auto h-7 px-3 rounded bg-teal-400 text-teal-950 font-medium disabled:opacity-50">Send</button>}
       {busy && (mode === 'trim' || mode === 'grow') && <span className="ml-auto text-teal-200">AI is redrawing…</span>}
-      <button onClick={() => { setMode(null); setClicks([]); }} className={`${mode === 'fix' || busy ? '' : 'ml-auto'} h-7 px-3 rounded border border-teal-700 hover:bg-teal-900`}>{mode === 'trim' || mode === 'grow' ? 'Done' : 'Cancel'}</button>
+      <button onClick={() => { setMode(null); setClicks([]); }} className={`${mode === 'fix' || busy ? '' : 'ml-auto'} h-7 px-3 rounded border border-teal-700 hover:bg-teal-900`}>{['trim', 'grow', 'erase', 'draw'].includes(mode) ? 'Done' : 'Cancel'}</button>
     </div>
   );
 
@@ -249,7 +296,8 @@ export default function Review() {
           ) : (
             <ViewerPane meta={meta} base={base} sid={sid} z={z} step={step} setZ={setZ} win={win} setWin={setWin} nodules={nodules} shapes={shapes}
               sel={sel} draft={draft} editable={!locked} mode={mode} clicks={clicks} onSelect={select} onImageClick={onImageClick}
-              onDrag={onDrag} onDragEnd={onDragEnd} showRejected={showRejected} setShowRejected={setShowRejected} modeBar={modeBar} busy={busy} />
+              onDrag={onDrag} onDragEnd={onDragEnd} showRejected={showRejected} setShowRejected={setShowRejected} modeBar={modeBar} busy={busy}
+              onStrokeEnd={onStrokeEnd} brushPx={brushPx} />
           )}
         </div>
         <NodulePanel scan={scan} nodules={nodules} sel={sel} onSelect={select} locked={locked} isReviewer={me.isReviewer} followup={followup}
@@ -261,11 +309,20 @@ export default function Review() {
             outline: {
               refineOk: refineOk && !!meta,
               onConfirm: () => {
-                const vol = sel.volume_mm3 ?? volumeFromContours(contoursOf(sel), sp, dz, sel.key_slice_z, sel.key_contour_px);
-                if (vol == null) { setNotice('Cannot confirm: no volume could be measured from this outline. Use Fix with clicks or redraw it.'); return; }
+                const vol = sel.volume_mm3 ?? volumeFromContours(allSliceContours(sel, contoursOf(sel)), sp, dz);
+                if (vol == null) { setNotice('Cannot confirm: no volume could be measured from this outline. Draw it (D) or reset it to the AI.'); return; }
+                if (sel.source !== 'AI') {
+                  const drawn = outlinedSlices(sel, contoursOf(sel)).length;
+                  const expected = Math.max(1, Math.round((Number(sel.short_axis_mm) || 0) / (dz || 1)));
+                  if (drawn < Math.ceil(expected * 0.6)) { setNotice(`Outline ${sel.nodule_label} on every slice it shows on before confirming (D): ${drawn} of about ${expected} slices drawn. The volume adds up the slices.`); return; }
+                }
                 save({ outline_confirmed: true, outline_confirmed_by_initials: me.initials, outline_confirmed_at: new Date().toISOString(), volume_mm3: vol, volume_stale: false });
               },
-              onReset: () => save({ key_contour_px: sel.ai_draft.contour, volume_mm3: sel.ai_draft.volume ?? null, volume_stale: false }),
+              onReset: () => save({ key_contour_px: sel.ai_draft.contour, contour_edits: {}, volume_mm3: sel.ai_draft.volume ?? null, volume_stale: false,
+                ...(sel.ai_draft.long_axis_px ? { long_axis_px: sel.ai_draft.long_axis_px, short_axis_px: sel.ai_draft.short_axis_px, long_axis_mm: sel.ai_draft.long, short_axis_mm: sel.ai_draft.short } : {}) }, { source: 'reset to AI' }),
+              onErase: () => setMode(mode === 'erase' ? null : 'erase'),
+              onDraw: () => setMode(mode === 'draw' ? null : 'draw'),
+              onUndo: undo,
               onTrim: () => { setZ(sel.key_slice_z); setMode(mode === 'trim' ? null : 'trim'); setClicks([]); },
               onGrow: () => { setZ(sel.key_slice_z); setMode(mode === 'grow' ? null : 'grow'); setClicks([]); },
               quickMode: mode,

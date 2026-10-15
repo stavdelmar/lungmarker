@@ -1,7 +1,7 @@
 const pts = (p) => p.map((q) => q.join(',')).join(' ');
 const AXES = ['long_axis_px', 'short_axis_px'];
 
-export default function Overlay({ shapes, selId, draft, isKey, editable, scale, startDrag, onSelect, clicks, interactive }) {
+export default function Overlay({ shapes, selId, draft, isKey, editable, scale, startDrag, onSelect, clicks, interactive, tool, stroke, hover, brushPx }) {
   const r = 4 / scale, fs = 12 / scale;
   return (
     <g>
@@ -35,6 +35,11 @@ export default function Overlay({ shapes, selId, draft, isKey, editable, scale, 
           )))}
         </>
       )}
+      {stroke?.length > 1 && (
+        <polyline points={pts(stroke)} fill="none" stroke={tool === 'erase' ? 'rgba(248,113,113,0.55)' : '#5eead4'} strokeLinecap="round" strokeLinejoin="round"
+          strokeWidth={tool === 'erase' ? brushPx * 2 : 1.5} vectorEffect={tool === 'erase' ? undefined : 'non-scaling-stroke'} style={{ pointerEvents: 'none' }} />
+      )}
+      {tool === 'erase' && hover && <circle cx={hover[0]} cy={hover[1]} r={brushPx} fill="rgba(248,113,113,0.12)" stroke="#f87171" strokeWidth={1} vectorEffect="non-scaling-stroke" style={{ pointerEvents: 'none' }} />}
       {clicks.map((c, i) => <circle key={'c' + i} cx={c.x} cy={c.y} r={r * 1.2} fill={c.label ? '#4ade80' : '#f87171'} stroke="#000" strokeWidth={1} vectorEffect="non-scaling-stroke" style={{ pointerEvents: 'none' }} />)}
     </g>
   );

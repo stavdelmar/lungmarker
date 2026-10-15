@@ -13,7 +13,7 @@ PASS  Notes = Daniel's own text only                                            
 PASS  Edit trail: AI draft for every exported nodule                            │ 4 'AI draft' rows; AI value column filled on changed fields: True; nodules accepted unchanged: 0
 PASS  Edit trail: review result per nodule (moved from Notes)                   │ Base N1: AI-assisted; accepted unchanged; Base N2: AI-assisted; edited: long axis, outline, volume; Foll N1: AI-assisted; accepted unchanged; Foll N2: AI-assisted; accepted unchanged
 PASS  Edit trail: Daniel's changes (old → new, who, when)                       │ fields changed: AI draft, Review result, long_axis_mm, match_to_prior, notes, outline (points moved by hand; volume recomputed), outline_confirmed, reject_reason, scan_approved, status, volume_mm3
-PASS  Edit trail: who approved each scan                                        │ Baseline: Approved by DR at 2026-10-15 16:34; Follow-up 1: Approved by DR at 2026-10-15 16:34
+PASS  Edit trail: who approved each scan                                        │ Baseline: Approved by DR at 2026-10-15 16:53; Follow-up 1: Approved by DR at 2026-10-15 16:53
 PASS  Daily export: no duplicates, changed row re-exported, nothing twice       │ Oct 15: Baseline N1, Baseline N2 · Oct 16: Follow-up 1 N1, Follow-up 1 N2 · Oct 17: Baseline N1 · Oct 18: (nothing new)
 PASS  Re-exported row is flagged as UPDATED in the Read me sheet                │ Oct 17 Read me: 1 row(s): 0 new, 1 updated. / UPDATED ROWS — already in the master sheet from an earlier export. Replace the old row, do not add a second one: / RIDER-TEST · 2006-01-10 · Baseline · N1
 

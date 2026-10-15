@@ -9,7 +9,8 @@ import SliceSlider from '@/components/review/SliceSlider';
 const btn = 'h-7 px-2.5 rounded text-xs border border-neutral-700 text-neutral-300 hover:bg-neutral-800';
 
 export default function ViewerPane(p) {
-  const { meta, base, sid, z, step, setZ, win, setWin, nodules, shapes, sel, draft, editable, mode, clicks, onSelect, onImageClick, onDrag, onDragEnd, showRejected, setShowRejected, modeBar, busy } = p;
+  const { meta, base, sid, z, step, setZ, win, setWin, nodules, shapes, sel, draft, editable, mode, clicks, onSelect, onImageClick, onDrag, onDragEnd, showRejected, setShowRejected, modeBar, busy, onStrokeEnd, brushPx } = p;
+  const strokeMode = mode === 'erase' || mode === 'draw' || mode === 'add';
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const n = meta.n_slices || meta.slices?.length || 1;
@@ -50,10 +51,11 @@ export default function ViewerPane(p) {
       {modeBar}
       <div className="flex flex-1 min-h-0">
         <Viewer src={engine.sliceUrl(base, sid, win, z)} cols={meta.cols} rows={meta.rows} zoom={zoom} setZoom={setZoom} pan={pan} setPan={setPan}
-          onStep={step} onImageClick={onImageClick} onDrag={onDrag} onDragEnd={onDragEnd} cursor={mode ? 'crosshair' : 'default'}>
-          {({ scale, startDrag }) => (
+          onStep={step} onImageClick={onImageClick} onDrag={onDrag} onDragEnd={onDragEnd} cursor={mode === 'erase' ? 'none' : mode ? 'crosshair' : 'default'}
+          strokeMode={strokeMode} onStrokeEnd={onStrokeEnd}>
+          {({ scale, startDrag, stroke, hover }) => (
             <Overlay shapes={shapes} selId={sel?.id} draft={draft} isKey={isKey} editable={editable && !mode} scale={scale}
-              startDrag={startDrag} onSelect={onSelect} clicks={clicks} interactive={!mode} />
+              startDrag={startDrag} onSelect={onSelect} clicks={clicks} interactive={!mode} tool={mode} stroke={stroke} hover={hover} brushPx={brushPx} />
           )}
         </Viewer>
         <SliceSlider z={z} n={n} onChange={setZ}

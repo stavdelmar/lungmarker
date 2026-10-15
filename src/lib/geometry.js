@@ -90,8 +90,57 @@ export function volumeFromContours(contoursByZ, sp, dz, keyZ, keyPoly) {
 // slice and swap the key slice's share (old area → new area) × slice step. If there is no volume yet,
 // rebuild it from the per-slice outlines. Returns null only if there is nothing to measure from.
 export function volumeAfterKeyEdit({ oldVolume, oldPoly, newPoly, sp, dz, contoursByZ, keyZ }) {
-  if (!dz || !newPoly || newPoly.length < 3) return oldVolume ?? null;
-  if (oldVolume != null && polyAreaMm2(oldPoly, sp) > 0)
-    return Math.max(1, Math.round(Number(oldVolume) + (polyAreaMm2(newPoly, sp) - polyAreaMm2(oldPoly, sp)) * dz));
+  if (!dz) return oldVolume ?? null;
+  if (oldVolume != null) {
+    const v = Number(oldVolume) + (polyAreaMm2(newPoly, sp) - polyAreaMm2(oldPoly, sp)) * dz;
+    return v > 0 ? Math.round(v) : null;
+  }
   return volumeFromContours(contoursByZ, sp, dz, keyZ, newPoly);
+}
+
+// The outline of nodule n on slice z: key slice → key_contour_px; a slice Daniel edited → his outline;
+// otherwise the engine's outline for that slice (if any).
+export function sliceContour(n, z, engineContours) {
+  if (!n) return [];
+  if (z === n.key_slice_z) return n.key_contour_px || [];
+  const ed = n.contour_edits || {};
+  if (Object.prototype.hasOwnProperty.call(ed, String(z))) return ed[String(z)] || [];
+  return largestPoly(engineContours?.[String(z)]);
+}
+
+// Every slice's outline for nodule n, with Daniel's edits applied ({"z": [poly]}).
+export function allSliceContours(n, engineContours) {
+  const out = {};
+  Object.entries(engineContours || {}).forEach(([z, polys]) => { out[z] = [largestPoly(polys)]; });
+  Object.entries(n.contour_edits || {}).forEach(([z, poly]) => { out[z] = [poly || []]; });
+  if (n.key_contour_px?.length > 2) out[String(n.key_slice_z)] = [n.key_contour_px];
+  return out;
+}
+
+// Slices that currently have an outline.
+export const outlinedSlices = (n, engineContours) => Object.entries(allSliceContours(n, engineContours)).filter(([, p]) => (p[0] || []).length > 2).map(([z]) => Number(z));
+
+// What to save when Daniel replaces nodule n's outline on slice zz (erase / paint / draw), with no engine:
+// the slice outline, axes from the key slice, and the volume. AI nodules keep the engine's volume for the
+// other slices and swap this slice's share; hand-drawn nodules sum Daniel's slices, and their key slice
+// moves to the slice where they are largest.
+export function slicePatch(n, zz, newPoly, { sp, dz, engineContours, slices }) {
+  const oldPoly = sliceContour(n, zz, engineContours);
+  const patch = {};
+  if (zz === n.key_slice_z) patch.key_contour_px = newPoly;
+  else patch.contour_edits = { ...(n.contour_edits || {}), [String(zz)]: newPoly };
+  if (n.source !== 'AI') {
+    const all = allSliceContours({ ...n, ...patch }, engineContours);
+    const [kz] = Object.entries(all).map(([k, p]) => [Number(k), polyAreaMm2(p[0], sp)]).sort((a, b) => b[1] - a[1])[0] || [n.key_slice_z];
+    if (kz !== n.key_slice_z && all[String(kz)]) {
+      const edits = Object.fromEntries(Object.entries(all).filter(([k]) => Number(k) !== kz).map(([k, p]) => [k, p[0]]));
+      Object.assign(patch, { key_slice_z: kz, slice_number: slices?.find((s) => s.z === kz)?.slice_number ?? kz + 1, key_contour_px: all[String(kz)][0], contour_edits: edits });
+    }
+    patch.volume_mm3 = volumeFromContours(all, sp, dz);
+  } else {
+    patch.volume_mm3 = volumeAfterKeyEdit({ oldVolume: n.volume_mm3, oldPoly, newPoly, sp, dz, contoursByZ: allSliceContours(n, engineContours), keyZ: zz });
+  }
+  if ('key_contour_px' in patch && patch.key_contour_px?.length > 2) Object.assign(patch, axesFromOutline(patch.key_contour_px, sp));
+  patch.volume_stale = false;
+  return patch;
 }
