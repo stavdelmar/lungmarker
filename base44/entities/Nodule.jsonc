@@ -1,0 +1,166 @@
+{
+  "name": "Nodule",
+  "type": "object",
+  "properties": {
+    "scan": {
+      "type": "string",
+      "description": "Scan id"
+    },
+    "engine_scan_id": {
+      "type": "string"
+    },
+    "nodule_label": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "AI",
+        "Added by reviewer"
+      ]
+    },
+    "engine_finding_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Pending",
+        "Accepted",
+        "Rejected"
+      ],
+      "default": "Pending"
+    },
+    "reject_reason": {
+      "type": "string"
+    },
+    "was_edited": {
+      "type": "boolean",
+      "default": false
+    },
+    "lobe": {
+      "type": "string"
+    },
+    "slice_number": {
+      "type": "number"
+    },
+    "key_slice_z": {
+      "type": "number"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "Solid",
+        "Part-solid",
+        "Ground-glass"
+      ]
+    },
+    "long_axis_mm": {
+      "type": "number"
+    },
+    "short_axis_mm": {
+      "type": "number"
+    },
+    "mean_diameter_mm": {
+      "type": "number"
+    },
+    "solid_component_mm": {
+      "type": "number"
+    },
+    "volume_mm3": {
+      "type": "number"
+    },
+    "outline_confirmed": {
+      "type": "boolean",
+      "default": false
+    },
+    "outline_confirmed_by_initials": {
+      "type": "string"
+    },
+    "outline_confirmed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "match_to_prior": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "flags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ai_confidence": {
+      "type": "number"
+    },
+    "key_contour_px": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      }
+    },
+    "long_axis_px": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      }
+    },
+    "short_axis_px": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        }
+      }
+    },
+    "ai_draft": {
+      "type": "object"
+    }
+  },
+  "rls": {
+    "read": {},
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "app_role": "reviewer"
+          }
+        },
+        {
+          "user_condition": {
+            "data.app_role": "reviewer"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "app_role": "reviewer"
+          }
+        },
+        {
+          "user_condition": {
+            "data.app_role": "reviewer"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

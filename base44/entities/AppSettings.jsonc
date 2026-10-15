@@ -1,0 +1,39 @@
+{
+  "name": "AppSettings",
+  "type": "object",
+  "properties": {
+    "engine_base_url": {
+      "type": "string"
+    },
+    "baseline_minutes_baseline": {
+      "type": "number",
+      "default": 39
+    },
+    "baseline_minutes_followup": {
+      "type": "number",
+      "default": 55
+    },
+    "idle_pause_seconds": {
+      "type": "number",
+      "default": 120
+    }
+  },
+  "rls": {
+    "read": {},
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

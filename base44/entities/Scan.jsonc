@@ -1,0 +1,106 @@
+{
+  "name": "Scan",
+  "type": "object",
+  "properties": {
+    "engine_scan_id": {
+      "type": "string"
+    },
+    "patient_id": {
+      "type": "string"
+    },
+    "scan_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "timepoint": {
+      "type": "string"
+    },
+    "series_number": {
+      "type": "number"
+    },
+    "slice_thickness_mm": {
+      "type": "number"
+    },
+    "n_slices": {
+      "type": "number"
+    },
+    "prior_engine_scan_id": {
+      "type": "string"
+    },
+    "review_status": {
+      "type": "string",
+      "enum": [
+        "Not started",
+        "In review",
+        "Approved"
+      ],
+      "default": "Not started"
+    },
+    "active_seconds": {
+      "type": "number",
+      "default": 0
+    },
+    "minutes_on_scan": {
+      "type": "number"
+    },
+    "approved_by_email": {
+      "type": "string"
+    },
+    "approved_by_initials": {
+      "type": "string"
+    },
+    "approved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "engine_version": {
+      "type": "string"
+    },
+    "ai_findings_count": {
+      "type": "number"
+    },
+    "exported_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "engine_scan_id"
+  ],
+  "rls": {
+    "read": {},
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "app_role": "reviewer"
+          }
+        },
+        {
+          "user_condition": {
+            "data.app_role": "reviewer"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "app_role": "reviewer"
+          }
+        },
+        {
+          "user_condition": {
+            "data.app_role": "reviewer"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

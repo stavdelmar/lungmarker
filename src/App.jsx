@@ -14,6 +14,10 @@ import ResetPassword from '@/pages/ResetPassword';
 import Layout from '@/components/Layout';
 // Add page imports here
 import Worklist from '@/pages/Worklist';
+import Review from '@/pages/Review';
+import Results from '@/pages/Results';
+import Export from '@/pages/Export';
+import Settings from '@/pages/Settings';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError } = useAuth();
@@ -39,6 +43,10 @@ const AuthenticatedApp = () => {
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         <Route element={<Layout />}>
           <Route path="/" element={<Worklist />} />
+          <Route path="/review/:id" element={<Review />} />
+          <Route path="/results" element={<Results />} />
+          <Route path="/export" element={<Export />} />
+          <Route path="/settings" element={<Settings />} />
         </Route>
       </Route>
       <Route path="*" element={<PageNotFound />} />

@@ -1,0 +1,68 @@
+{
+  "name": "EditEvent",
+  "type": "object",
+  "properties": {
+    "scan": {
+      "type": "string",
+      "description": "Scan id"
+    },
+    "nodule": {
+      "type": "string",
+      "description": "Nodule id (optional)"
+    },
+    "engine_scan_id": {
+      "type": "string"
+    },
+    "nodule_label": {
+      "type": "string"
+    },
+    "field": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "ai_value": {
+      "type": "string"
+    },
+    "old_value": {
+      "type": "string"
+    },
+    "new_value": {
+      "type": "string"
+    },
+    "edited_by_email": {
+      "type": "string"
+    },
+    "edited_by_initials": {
+      "type": "string"
+    },
+    "edited_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "rls": {
+    "read": {},
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "app_role": "reviewer"
+          }
+        },
+        {
+          "user_condition": {
+            "data.app_role": "reviewer"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": "__nobody__"
+      }
+    },
+    "delete": false
+  }
+}
