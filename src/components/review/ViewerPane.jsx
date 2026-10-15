@@ -10,7 +10,7 @@ const btn = 'h-7 px-2.5 rounded text-xs border border-neutral-700 text-neutral-3
 
 export default function ViewerPane(p) {
   const { meta, base, sid, z, step, setZ, win, setWin, nodules, shapes, sel, draft, editable, mode, clicks, onSelect, onImageClick, onDrag, onDragEnd, showRejected, setShowRejected, modeBar, busy, onStrokeEnd, brushPx } = p;
-  const strokeMode = mode === 'erase' || mode === 'draw' || mode === 'add';
+  const strokeMode = mode === 'erase' || mode === 'draw';
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const n = meta.n_slices || meta.slices?.length || 1;

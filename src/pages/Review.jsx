@@ -9,7 +9,7 @@ import { useSettings, useHealth } from '@/hooks/useAppData';
 import { useScanTimer } from '@/hooks/useScanTimer';
 import { initNodules } from '@/lib/initNodules';
 import { saveNodule, logEvent, approveScan } from '@/lib/edits';
-import { axesFromOutline, lenMm, meanOf, findingPatch, sliceStepMm, volumeAfterKeyEdit, volumeFromContours, sliceContour, allSliceContours, outlinedSlices, slicePatch } from '@/lib/geometry';
+import { axesFromOutline, lenMm, meanOf, findingPatch, sliceStepMm, volumeAfterKeyEdit, volumeFromContours, sliceContour, allSliceContours, slicePatch, drawnSlices, interpolateSlices, handVolumeReady } from '@/lib/geometry';
 import { brushEdit, lassoToPoly } from '@/lib/maskEdit';
 import { MIN_LONG_AXIS_MM } from '@/lib/exportRows';
 import EngineOffline from '@/components/EngineOffline';
@@ -103,9 +103,12 @@ export default function Review() {
   const shapes = useMemo(() => nodules.filter((n) => showRejected || n.status !== 'Rejected').map((n) => {
     let polys = [];
     if (z === n.key_slice_z) polys = [(n.id === selId ? draft?.key_contour_px : n.key_contour_px) || []];
-    else polys = [sliceContour(n, z, findingsById[n.engine_finding_id]?.contours)];
+    else if (n.source !== 'AI') {
+      const { contours, filled } = interpolateSlices(drawnSlices(n), meta?.pixel_spacing_mm || [1, 1]);
+      return { n, polys: contours[String(z)] || [], filled: filled.has(z) };
+    } else polys = [sliceContour(n, z, findingsById[n.engine_finding_id]?.contours)];
     return { n, polys };
-  }), [nodules, showRejected, z, selId, draft, findingsById]);
+  }), [nodules, showRejected, z, selId, draft, findingsById, meta]);
 
   const onDrag = (h, pt) => setDraft((d) => {
     const key = h.kind === 'contour' ? 'key_contour_px' : h.kind;
@@ -154,18 +157,13 @@ export default function Review() {
   const onStrokeEnd = (points, e) => {
     if (locked) return;
     if (mode === 'erase' && sel) {
-      const before = sliceContour(sel, z, contoursOf(sel));
+      const before = sliceContour(sel, z, contoursOf(sel), sp);
       if (!before.length && !e.shiftKey) { setNotice(`${sel.nodule_label} has no outline on this slice. Shift + drag paints one, or press D to draw it.`); return; }
       const after = brushEdit(before, points, brushPx, e.shiftKey ? 'paint' : 'erase');
       if (JSON.stringify(after) !== JSON.stringify(before)) editSlice(sel, z, after, e.shiftKey ? 'brush: painted' : 'brush: erased');
     } else if (mode === 'draw' && sel) {
       const poly = lassoToPoly(points);
       if (poly) editSlice(sel, z, poly, 'outline drawn by hand');
-    } else if (mode === 'add') {
-      const poly = lassoToPoly(points);
-      if (!poly) return;
-      createAdded({ key_contour_px: poly, ...axesFromOutline(poly, sp), volume_mm3: volumeFromContours({}, sp, dz, z, poly) });
-      setMode('draw'); setClicks([]);
     }
   };
 
@@ -205,8 +203,9 @@ export default function Review() {
     const c = [...clicks, { x: pt[0], y: pt[1], label: 1 }];
     if (c.length < 4) return setClicks(c);
     const L = [[c[0].x, c[0].y], [c[1].x, c[1].y]], S = [[c[2].x, c[2].y], [c[3].x, c[3].y]];
-    createAdded({ long_axis_px: L, short_axis_px: S, long_axis_mm: lenMm(L, sp), short_axis_mm: lenMm(S, sp) });
+    createAdded({ long_axis_px: L, short_axis_px: S, long_axis_mm: lenMm(L, sp), short_axis_mm: lenMm(S, sp), volume_mm3: null });
     setMode(null); setClicks([]);
+    setNotice('Nodule added with its axes. Volume stays empty unless you outline it (D) on its top, middle and bottom slices; the slices in between are filled in.');
   };
 
   const sendFix = () => runEngine(async () => {
@@ -275,8 +274,8 @@ export default function Review() {
       {mode === 'trim' && <span><b>Trim −</b> · click on a vessel tail or anything that is not nodule; the AI redraws at once. Click again to trim more. Esc when done.</span>}
       {mode === 'grow' && <span><b>Grow +</b> · click on nodule tissue the outline missed; the AI redraws at once. Esc when done.</span>}
       {mode === 'erase' && <span><b>Erase</b> · drag over the part to cut away (e.g. a vessel tail). A piece cut off from the nodule disappears. Shift + drag paints back · brush <span className="font-mono">{brushMm} mm</span> ([ ]) · Ctrl+Z undo · works on any slice · Esc when done</span>}
-      {mode === 'draw' && <span><b>Draw</b> · drag around the nodule on this slice to replace its outline here. Scroll to the next slice and draw again. Ctrl+Z undo · Esc when done</span>}
-      {mode === 'add' && <span>{refineOk ? 'Click on the nodule the AI missed, or drag around it to outline it yourself.' : `Drag around the missed nodule to outline it (then draw it on its other slices), or click the long axis ends, then the short axis ends (${clicks.length}/4).`}</span>}
+      {mode === 'draw' && <span><b>Draw</b> · drag around the nodule to outline it on this slice. {sel && sel.source !== 'AI' ? <>For a volume, outline its <b>top, middle and bottom</b> slices; the slices in between are filled in (dashed). <span className="font-mono">{Object.keys(drawnSlices(sel)).length}</span> outlined.</> : 'Replaces the outline on this slice.'} Ctrl+Z undo · Esc when done</span>}
+      {mode === 'add' && <span>{refineOk ? 'Click on the nodule the AI missed.' : <>On the slice where it looks largest: click the two ends of the <b>long axis</b>, then the two ends of the <b>short axis</b> (<span className="font-mono">{clicks.length}/4</span>).</>}</span>}
       {mode === 'fix' && <button disabled={!clicks.length || busy} onClick={sendFix} className="ml-auto h-7 px-3 rounded bg-teal-400 text-teal-950 font-medium disabled:opacity-50">Send</button>}
       {busy && (mode === 'trim' || mode === 'grow') && <span className="ml-auto text-teal-200">AI is redrawing…</span>}
       <button onClick={() => { setMode(null); setClicks([]); }} className={`${mode === 'fix' || busy ? '' : 'ml-auto'} h-7 px-3 rounded border border-teal-700 hover:bg-teal-900`}>{['trim', 'grow', 'erase', 'draw'].includes(mode) ? 'Done' : 'Cancel'}</button>
@@ -309,13 +308,9 @@ export default function Review() {
             outline: {
               refineOk: refineOk && !!meta,
               onConfirm: () => {
-                const vol = sel.volume_mm3 ?? volumeFromContours(allSliceContours(sel, contoursOf(sel)), sp, dz);
+                if (sel.source !== 'AI' && !handVolumeReady(drawnSlices(sel))) { setNotice(`To record a volume for ${sel.nodule_label}, outline it (D) on its top, middle and bottom slices; the slices in between are filled in. Without that, leave the outline unconfirmed: Volume stays empty.`); return; }
+                const vol = sel.volume_mm3 ?? volumeFromContours(allSliceContours(sel, contoursOf(sel), sp), sp, dz);
                 if (vol == null) { setNotice('Cannot confirm: no volume could be measured from this outline. Draw it (D) or reset it to the AI.'); return; }
-                if (sel.source !== 'AI') {
-                  const drawn = outlinedSlices(sel, contoursOf(sel)).length;
-                  const expected = Math.max(1, Math.round((Number(sel.short_axis_mm) || 0) / (dz || 1)));
-                  if (drawn < Math.ceil(expected * 0.6)) { setNotice(`Outline ${sel.nodule_label} on every slice it shows on before confirming (D): ${drawn} of about ${expected} slices drawn. The volume adds up the slices.`); return; }
-                }
                 save({ outline_confirmed: true, outline_confirmed_by_initials: me.initials, outline_confirmed_at: new Date().toISOString(), volume_mm3: vol, volume_stale: false });
               },
               onReset: () => save({ key_contour_px: sel.ai_draft.contour, contour_edits: {}, volume_mm3: sel.ai_draft.volume ?? null, volume_stale: false,

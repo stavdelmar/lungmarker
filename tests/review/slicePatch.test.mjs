@@ -1,6 +1,6 @@
 // What gets saved when Daniel erases / draws on a slice, with no engine. Run:
 // node --import ./tests/export/register.mjs tests/review/slicePatch.test.mjs
-import { slicePatch, polyAreaMm2, axesFromOutline } from '@/lib/geometry';
+import { slicePatch, polyAreaMm2, axesFromOutline, interpolateSlices, drawnSlices } from '@/lib/geometry';
 import { brushEdit, lassoToPoly } from '@/lib/maskEdit';
 import { saveNodule } from '@/lib/edits';
 import { base44 } from '@/api/base44Client';
@@ -41,16 +41,40 @@ const ai2 = { ...ai1, ...p2 };
 const p3 = slicePatch(ai2, 102, [], { sp: SP, dz: DZ, engineContours: eng, slices });
 check('Erasing a whole slice removes its share of the volume', Math.abs((p2.volume_mm3 - p3.volume_mm3) - polyAreaMm2(eng[102][0], SP) * DZ) <= 1, `${p2.volume_mm3} → ${p3.volume_mm3} mm³`);
 
-// 4) A nodule the AI missed, drawn by hand on 3 slices (no engine at all).
-let man = { source: 'Added by reviewer', key_slice_z: 50, key_contour_px: lassoToPoly(circle(100, 100, 5, 60)), contour_edits: {}, volume_mm3: null };
-man = { ...man, ...slicePatch(man, 50, man.key_contour_px, { sp: SP, dz: DZ, engineContours: {}, slices }) };
-const v1 = man.volume_mm3;
-man = { ...man, ...slicePatch(man, 51, lassoToPoly(circle(100, 100, 8, 60)), { sp: SP, dz: DZ, engineContours: {}, slices }) };
-check('Hand-drawn nodule: key slice moves to where it is largest', man.key_slice_z === 51 && man.slice_number === 52, `key slice z=${man.key_slice_z}, Slice # ${man.slice_number}`);
-man = { ...man, ...slicePatch(man, 52, lassoToPoly(circle(100, 100, 5, 60)), { sp: SP, dz: DZ, engineContours: {}, slices }) };
-const expectV = Math.round((Math.PI * 25 * 2 + Math.PI * 64) * 0.49 * DZ);
-check('Hand-drawn nodule: volume = sum of drawn slices × slice gap (±8%)', Math.abs(man.volume_mm3 - expectV) / expectV < 0.08, `${v1} → ${man.volume_mm3} mm³ (circle maths: ${expectV})`);
-check('Hand-drawn nodule: axes from its largest slice (2×8 px×0.7 = 11.2 mm ± 0.8)', Math.abs(man.long_axis_mm - 11.2) <= 0.8, `long ${man.long_axis_mm} × short ${man.short_axis_mm} mm`);
+// 4) A nodule the AI missed. Default: 4 clicks → axes only, no outline, Volume empty.
+const clicked = { source: 'Added by reviewer', key_slice_z: 50, key_contour_px: [], contour_edits: {}, volume_mm3: null, long_axis_mm: 8.4, short_axis_mm: 8.4 };
+check('Added by 4 clicks: axes only, Volume empty', clicked.volume_mm3 === null && !clicked.key_contour_px.length, `long ${clicked.long_axis_mm} × short ${clicked.short_axis_mm} mm, volume (empty)`);
+// One outline alone gives no volume (top and bottom are unknown).
+const one = { ...clicked, ...slicePatch(clicked, 50, lassoToPoly(circle(100, 100, 6, 60)), { sp: SP, dz: DZ, engineContours: {}, slices }) };
+check('One outlined slice: still no volume', one.volume_mm3 === null, 'volume (empty)');
+
+// Option for volume: outline top, middle and bottom; the slices between are filled in.
+// Ground truth = the same nodule outlined on EVERY slice (what Daniel did by hand before).
+const R = 6, kMax = Math.floor((R - 0.01) / DZ); // sphere radius 6 mm → slices −4…+4 around the middle
+const rad = (k) => Math.sqrt(R * R - (k * DZ) ** 2) / SP[0]; // px
+const sphereSlice = (k) => lassoToPoly(circle(100, 100, rad(k), 72));
+let full = { ...clicked }; for (let k = -kMax; k <= kMax; k++) full = { ...full, ...slicePatch(full, 60 + k, sphereSlice(k), { sp: SP, dz: DZ, engineContours: {}, slices }) };
+let three = { ...clicked }; for (const k of [-kMax, 0, kMax]) three = { ...three, ...slicePatch(three, 60 + k, sphereSlice(k), { sp: SP, dz: DZ, engineContours: {}, slices }) };
+const trueV = (4 / 3) * Math.PI * R ** 3;
+check(`Sphere, 3 slices outlined vs all ${2 * kMax + 1} outlined: within 5%`, Math.abs(three.volume_mm3 - full.volume_mm3) / full.volume_mm3 < 0.05, `3 slices ${three.volume_mm3} mm³ vs every slice ${full.volume_mm3} mm³ (true sphere ${trueV.toFixed(0)})`);
+check('Key slice = the middle (largest) one, Slice # set', three.key_slice_z === 60 && three.slice_number === 61, `z=${three.key_slice_z}, Slice # ${three.slice_number}`);
+const filled = interpolateSlices(drawnSlices(three), SP).filled;
+check('Slices in between are filled in (shown dashed)', filled.size === 2 * kMax - 2, `${filled.size} filled: ${[...filled].join(', ')}`);
+// Straight-line radius interpolation would have badly undercounted a round nodule; show the size of that error.
+const naive = (() => { let v = 0; for (let k = -kMax; k <= kMax; k++) { const t = Math.abs(k) / kMax; const r = rad(0) + (rad(kMax) - rad(0)) * t; v += Math.PI * (r * SP[0]) ** 2 * DZ; } return Math.round(v); })();
+check('(For comparison) a straight-line fill would undercount', naive < three.volume_mm3 * 0.9, `straight-line fill ${naive} mm³ vs curve ${three.volume_mm3} mm³`);
+
+// Only top + bottom of a big nodule: the middle is unknown → no volume (would be far too small).
+let tb = { ...clicked }; for (const k of [-kMax, kMax]) tb = { ...tb, ...slicePatch(tb, 60 + k, sphereSlice(k), { sp: SP, dz: DZ, engineContours: {}, slices }) };
+check('Top + bottom only (middle missing): no volume, asks for the middle', tb.volume_mm3 === null, 'volume (empty)');
+// A small nodule on 2 neighbouring slices: fine.
+let small = { ...clicked }; for (const k of [0, 1]) small = { ...small, ...slicePatch(small, 90 + k, lassoToPoly(circle(100, 100, 4, 60)), { sp: SP, dz: DZ, engineContours: {}, slices }) };
+check('Small nodule on 2 neighbouring slices: volume', small.volume_mm3 > 0, `${small.volume_mm3} mm³`);
+// Elongated (ellipsoid) nodule.
+const ell = (k) => lassoToPoly(Array.from({ length: 72 }, (_, i) => { const t = (2 * Math.PI * i) / 72, f = Math.sqrt(Math.max(0, 1 - ((k * DZ) / 5) ** 2)); return [100 + (9 / 0.7) * f * Math.cos(t), 100 + (5 / 0.7) * f * Math.sin(t)]; }));
+let eFull = { ...clicked }; for (let k = -3; k <= 3; k++) eFull = { ...eFull, ...slicePatch(eFull, 80 + k, ell(k), { sp: SP, dz: DZ, engineContours: {}, slices }) };
+let eThree = { ...clicked }; for (const k of [-3, 0, 3]) eThree = { ...eThree, ...slicePatch(eThree, 80 + k, ell(k), { sp: SP, dz: DZ, engineContours: {}, slices }) };
+check('Elongated nodule, 3 slices vs every slice: within 5%', Math.abs(eThree.volume_mm3 - eFull.volume_mm3) / eFull.volume_mm3 < 0.05, `${eThree.volume_mm3} vs ${eFull.volume_mm3} mm³; axes ${eThree.long_axis_mm} × ${eThree.short_axis_mm} mm`);
 
 // 5) Through the app's save: editing another slice of a confirmed outline un-confirms it, and is in the trail.
 const scan = await base44.entities.Scan.create({ engine_scan_id: 'T', patient_id: 'T' });

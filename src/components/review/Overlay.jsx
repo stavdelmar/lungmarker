@@ -5,12 +5,12 @@ export default function Overlay({ shapes, selId, draft, isKey, editable, scale, 
   const r = 4 / scale, fs = 12 / scale;
   return (
     <g>
-      {shapes.map(({ n, polys }) => polys.filter((p) => p.length > 2).map((p, i) => {
+      {shapes.map(({ n, polys, filled }) => polys.filter((p) => p.length > 2).map((p, i) => {
         const isSel = n.id === selId;
         return (
           <polygon key={n.id + i} points={pts(p)} fill={isSel ? 'rgba(94,234,212,0.07)' : 'transparent'}
             stroke={isSel ? '#5eead4' : n.status === 'Rejected' ? '#f87171' : '#fbbf24'} strokeWidth={isSel ? 2.5 : 1}
-            strokeDasharray={n.status === 'Rejected' ? '4 3' : undefined} vectorEffect="non-scaling-stroke"
+            strokeDasharray={n.status === 'Rejected' ? '4 3' : filled ? '2 3' : undefined} vectorEffect="non-scaling-stroke"
             style={{ cursor: interactive ? 'pointer' : undefined, pointerEvents: interactive ? 'all' : 'none' }}
             onClick={(e) => { if (!interactive) return; e.stopPropagation(); onSelect(n); }} />
         );

@@ -98,10 +98,86 @@ export function volumeAfterKeyEdit({ oldVolume, oldPoly, newPoly, sp, dz, contou
   return volumeFromContours(contoursByZ, sp, dz, keyZ, newPoly);
 }
 
+
+// ---- Hand-outlined nodules: Daniel outlines 2–3 slices (top, middle, bottom); slices in between are filled in ----
+// Outline as centroid + radius at N angles (nodule outlines are roughly star-shaped around their centre).
+const N_RAYS = 64;
+function radial(poly) {
+  const n = poly.length;
+  let cx = 0, cy = 0;
+  poly.forEach(([x, y]) => { cx += x; cy += y; });
+  cx /= n; cy /= n;
+  const r = [];
+  for (let k = 0; k < N_RAYS; k++) {
+    const t = (2 * Math.PI * k) / N_RAYS, dx = Math.cos(t), dy = Math.sin(t);
+    let best = 0;
+    for (let i = 0; i < n; i++) {
+      const [x1, y1] = poly[i], [x2, y2] = poly[(i + 1) % n];
+      const ex = x2 - x1, ey = y2 - y1, den = dx * ey - dy * ex;
+      if (Math.abs(den) < 1e-12) continue;
+      const s = ((x1 - cx) * ey - (y1 - cy) * ex) / den, u = ((x1 - cx) * dy - (y1 - cy) * dx) / den;
+      if (s > 0 && u >= 0 && u <= 1 && s > best) best = s;
+    }
+    r.push(best);
+  }
+  return { cx, cy, r };
+}
+const fromRadial = ({ cx, cy, r }, scale = 1) => r.map((v, k) => {
+  const t = (2 * Math.PI * k) / N_RAYS;
+  return [Math.round((cx + v * scale * Math.cos(t)) * 10) / 10, Math.round((cy + v * scale * Math.sin(t)) * 10) / 10];
+});
+
+// Enough outlined slices for a volume: 3 or more (top, middle, bottom), or 2 that are at most one slice
+// apart (a small nodule). Top + bottom alone would miss the widest part in the middle.
+export function handVolumeReady(drawn) {
+  const zs = Object.keys(drawn).map(Number).sort((a, b) => a - b);
+  return zs.length >= 3 || (zs.length === 2 && zs[1] - zs[0] <= 2);
+}
+
+// Slices Daniel outlined himself: {"z": poly}.
+export function drawnSlices(n) {
+  const out = {};
+  Object.entries(n.contour_edits || {}).forEach(([z, p]) => { if (p?.length > 2) out[z] = p; });
+  if (n.key_contour_px?.length > 2) out[String(n.key_slice_z)] = n.key_contour_px;
+  return out;
+}
+
+// Fill the slices between outlined ones. Shape: blend of the two outlines around the gap. Size: the area
+// follows a curve through the 3 nearest outlined slices (exact for a sphere / ellipsoid; with only 2 outlined
+// slices, a straight line). Returns {"z": [poly]} for every slice from the first to the last outlined one,
+// and the set of slices that were filled in.
+export function interpolateSlices(drawn, sp) {
+  const zs = Object.keys(drawn).map(Number).sort((a, b) => a - b);
+  const out = {}, filled = new Set();
+  zs.forEach((z) => { out[String(z)] = [drawn[String(z)]]; });
+  if (zs.length < 2) return { contours: out, filled };
+  const A = zs.map((z) => polyAreaMm2(drawn[String(z)], sp));
+  const R = zs.map((z) => radial(drawn[String(z)]));
+  const areaAt = (z, i) => { // i = index of the gap's lower outlined slice
+    if (zs.length === 2) return A[0] + ((A[1] - A[0]) * (z - zs[0])) / (zs[1] - zs[0]);
+    const j = Math.min(Math.max(i - (i === zs.length - 2 ? 1 : 0), 0), zs.length - 3); // 3 nearest outlined slices
+    const [z0, z1, z2] = [zs[j], zs[j + 1], zs[j + 2]], [a0, a1, a2] = [A[j], A[j + 1], A[j + 2]];
+    const v = a0 * ((z - z1) * (z - z2)) / ((z0 - z1) * (z0 - z2)) + a1 * ((z - z0) * (z - z2)) / ((z1 - z0) * (z1 - z2)) + a2 * ((z - z0) * (z - z1)) / ((z2 - z0) * (z2 - z1));
+    const lo = Math.min(A[i], A[i + 1]);
+    return Math.min(Math.max(v, lo), 1.5 * Math.max(...A)); // never smaller than the outlines around the gap
+  };
+  for (let i = 0; i < zs.length - 1; i++) {
+    for (let z = zs[i] + 1; z < zs[i + 1]; z++) {
+      const t = (z - zs[i]) / (zs[i + 1] - zs[i]), a = R[i], b = R[i + 1];
+      const blend = { cx: a.cx + (b.cx - a.cx) * t, cy: a.cy + (b.cy - a.cy) * t, r: a.r.map((v, k) => v + (b.r[k] - v) * t) };
+      const base = fromRadial(blend), target = areaAt(z, i), have = polyAreaMm2(base, sp);
+      out[String(z)] = [have > 0 ? fromRadial(blend, Math.sqrt(target / have)) : base];
+      filled.add(z);
+    }
+  }
+  return { contours: out, filled };
+}
+
 // The outline of nodule n on slice z: key slice → key_contour_px; a slice Daniel edited → his outline;
 // otherwise the engine's outline for that slice (if any).
-export function sliceContour(n, z, engineContours) {
+export function sliceContour(n, z, engineContours, sp) {
   if (!n) return [];
+  if (n.source && n.source !== 'AI') return interpolateSlices(drawnSlices(n), sp || [1, 1]).contours[String(z)]?.[0] || [];
   if (z === n.key_slice_z) return n.key_contour_px || [];
   const ed = n.contour_edits || {};
   if (Object.prototype.hasOwnProperty.call(ed, String(z))) return ed[String(z)] || [];
@@ -109,7 +185,8 @@ export function sliceContour(n, z, engineContours) {
 }
 
 // Every slice's outline for nodule n, with Daniel's edits applied ({"z": [poly]}).
-export function allSliceContours(n, engineContours) {
+export function allSliceContours(n, engineContours, sp) {
+  if (n.source && n.source !== 'AI') return interpolateSlices(drawnSlices(n), sp || [1, 1]).contours;
   const out = {};
   Object.entries(engineContours || {}).forEach(([z, polys]) => { out[z] = [largestPoly(polys)]; });
   Object.entries(n.contour_edits || {}).forEach(([z, poly]) => { out[z] = [poly || []]; });
@@ -118,27 +195,27 @@ export function allSliceContours(n, engineContours) {
 }
 
 // Slices that currently have an outline.
-export const outlinedSlices = (n, engineContours) => Object.entries(allSliceContours(n, engineContours)).filter(([, p]) => (p[0] || []).length > 2).map(([z]) => Number(z));
+export const outlinedSlices = (n, engineContours, sp) => Object.entries(allSliceContours(n, engineContours, sp)).filter(([, p]) => (p[0] || []).length > 2).map(([z]) => Number(z));
 
 // What to save when Daniel replaces nodule n's outline on slice zz (erase / paint / draw), with no engine:
 // the slice outline, axes from the key slice, and the volume. AI nodules keep the engine's volume for the
 // other slices and swap this slice's share; hand-drawn nodules sum Daniel's slices, and their key slice
 // moves to the slice where they are largest.
 export function slicePatch(n, zz, newPoly, { sp, dz, engineContours, slices }) {
-  const oldPoly = sliceContour(n, zz, engineContours);
+  const oldPoly = sliceContour(n, zz, engineContours, sp);
   const patch = {};
   if (zz === n.key_slice_z) patch.key_contour_px = newPoly;
   else patch.contour_edits = { ...(n.contour_edits || {}), [String(zz)]: newPoly };
   if (n.source !== 'AI') {
-    const all = allSliceContours({ ...n, ...patch }, engineContours);
-    const [kz] = Object.entries(all).map(([k, p]) => [Number(k), polyAreaMm2(p[0], sp)]).sort((a, b) => b[1] - a[1])[0] || [n.key_slice_z];
-    if (kz !== n.key_slice_z && all[String(kz)]) {
-      const edits = Object.fromEntries(Object.entries(all).filter(([k]) => Number(k) !== kz).map(([k, p]) => [k, p[0]]));
-      Object.assign(patch, { key_slice_z: kz, slice_number: slices?.find((s) => s.z === kz)?.slice_number ?? kz + 1, key_contour_px: all[String(kz)][0], contour_edits: edits });
+    const drawn = drawnSlices({ ...n, ...patch });
+    const [kz] = Object.entries(drawn).map(([k, p]) => [Number(k), polyAreaMm2(p, sp)]).sort((a, b) => b[1] - a[1])[0] || [n.key_slice_z];
+    if (kz !== n.key_slice_z && drawn[String(kz)]) {
+      const edits = Object.fromEntries(Object.entries(drawn).filter(([k]) => Number(k) !== kz));
+      Object.assign(patch, { key_slice_z: kz, slice_number: slices?.find((s) => s.z === kz)?.slice_number ?? kz + 1, key_contour_px: drawn[String(kz)], contour_edits: edits });
     }
-    patch.volume_mm3 = volumeFromContours(all, sp, dz);
+    patch.volume_mm3 = handVolumeReady(drawn) ? volumeFromContours(interpolateSlices(drawn, sp).contours, sp, dz) : null;
   } else {
-    patch.volume_mm3 = volumeAfterKeyEdit({ oldVolume: n.volume_mm3, oldPoly, newPoly, sp, dz, contoursByZ: allSliceContours(n, engineContours), keyZ: zz });
+    patch.volume_mm3 = volumeAfterKeyEdit({ oldVolume: n.volume_mm3, oldPoly, newPoly, sp, dz, contoursByZ: allSliceContours(n, engineContours, sp), keyZ: zz });
   }
   if ('key_contour_px' in patch && patch.key_contour_px?.length > 2) Object.assign(patch, axesFromOutline(patch.key_contour_px, sp));
   patch.volume_stale = false;
