@@ -1,6 +1,11 @@
 """Checks an exported LungMarker workbook against Daniel's master-sheet rules (status.md section 3).
 Usage: python3 tests/export/check.py tests/export/out   (reads out.xlsx + out.state.json)"""
-import json, re, sys
+import json, re, sys, zipfile
+
+def zipfile_serial(stem):
+    x = zipfile.ZipFile(f"{stem}.xlsx").read("xl/worksheets/sheet1.xml").decode()
+    m = re.search(r'<c r="B2"[^>]*><v>([^<]+)</v>', x)
+    return m.group(1) if m else "?"
 from openpyxl import load_workbook
 
 stem = sys.argv[1]
@@ -32,13 +37,17 @@ check("18 columns, exact names and order", header == COLS,
 # 2 formats
 bad = []
 for r in rows:
-    if not (isinstance(r["Scan date"], str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", r["Scan date"])): bad.append(f"date {show(r['Scan date'])}")
+    pass
     if not re.fullmatch(r"Baseline|Follow-up \d+", str(r["Timepoint"])): bad.append(f"timepoint {show(r['Timepoint'])}")
     if r["Lobe"] is not None and r["Lobe"] not in {"RUL", "RML", "RLL", "LUL", "LLL"}: bad.append(f"lobe {show(r['Lobe'])}")
     if not re.fullmatch(r"N\d+", str(r["Nodule ID"])): bad.append(f"nodule id {show(r['Nodule ID'])}")
     if not re.fullmatch(r"[A-Z]{2,3}", str(r["Measured by"])): bad.append(f"measured by {show(r['Measured by'])}")
-check("Formats like his example row (date, Timepoint, Lobe, N1, initials)", not bad,
-      "; ".join(bad) or "; ".join(f"{r['Scan date']} {r['Timepoint']} {r['Nodule ID']} {show(r['Lobe'])} {r['Measured by']}" for r in rows))
+check("Formats like his example row (Timepoint, Lobe, N1, initials)", not bad,
+      "; ".join(bad) or "; ".join(f"{r['Timepoint']} {r['Nodule ID']} {show(r['Lobe'])} {r['Measured by']}" for r in rows))
+date_cells = [ws.cell(row=i, column=2) for i in range(2, ws.max_row + 1)]
+bad = [f"B{c.row} type={c.data_type} format={c.number_format} value={c.value!r}" for c in date_cells if not (c.is_date and c.number_format == "yyyy-mm-dd")]
+check("Scan date is a real Excel date, shown yyyy-mm-dd", not bad, "; ".join(bad) or
+      f"B2: stored as date {date_cells[0].value:%Y-%m-%d} (Excel number {zipfile_serial(stem)}), format '{date_cells[0].number_format}' → displays 2006-01-10")
 
 # 3 mean
 bad = [f"{r['Timepoint']} {r['Nodule ID']}: ({r['Long axis (mm)']}+{r['Short axis (mm)']})/2 = {(r['Long axis (mm)'] + r['Short axis (mm)']) / 2:.2f} but sheet says {r['Mean diameter (mm)']}"
@@ -54,15 +63,15 @@ for r in rows:
     (bad if r["Slice #"] != expected else ok_ev).append(f"{r['Nodule ID']} ({r['Timepoint'][:4]}): {r['Slice #']} vs key slice {expected}")
 check("Slice # = viewer image number of the key (largest) slice", not bad, "; ".join(bad or ok_ev))
 
-# 5 volume
+# 5 volume: confirmed outline -> volume filled; not confirmed -> empty
 bad, ev = [], []
 for r in rows:
     n = nod[key(r)]
-    should = n.get("outline_confirmed") and not n.get("volume_stale") and n.get("volume_mm3") is not None
     got = r["Volume (mm3)"]
-    if bool(should) != (got is not None): bad.append(f"{r['Nodule ID']} ({r['Timepoint'][:4]}) confirmed={n.get('outline_confirmed')} stale={n.get('volume_stale')} volume={show(got)}")
-    ev.append(f"{r['Nodule ID']} ({r['Timepoint'][:4]}): confirmed={bool(n.get('outline_confirmed'))}, stale={bool(n.get('volume_stale'))} → {show(got)}")
-check("Volume only after the outline is confirmed (else empty)", not bad, "; ".join(bad or ev))
+    if bool(n.get("outline_confirmed")) != (got is not None): bad.append(f"{r['Nodule ID']} ({r['Timepoint'][:4]}) confirmed={n.get('outline_confirmed')} volume={show(got)}")
+    ai = n["ai_draft"].get("volume")
+    ev.append(f"{r['Nodule ID']} ({r['Timepoint'][:4]}): confirmed={bool(n.get('outline_confirmed'))} → {show(got)}" + (f" (AI {ai}, recomputed after hand edit)" if got is not None and ai is not None and got != ai else ""))
+check("Volume filled for every confirmed outline, empty otherwise", not bad, "; ".join(bad or ev))
 
 # 6 match to prior
 init = state["afterInit"]
@@ -104,6 +113,10 @@ check("Blank cells truly empty (no '', 0, null in the file)", not bad,
 bad = [f"{r['Timepoint'][:4]} {r['Nodule ID']} long axis {r['Long axis (mm)']} mm" for r in rows if r["Long axis (mm)"] < 4]
 check("Only nodules ≥ 4 mm (long axis)", not bad, "; ".join(bad) or "smallest long axis: " + str(min(r["Long axis (mm)"] for r in rows)) + " mm")
 
+# notes: Daniel's text only
+bad = [f"{r['Timepoint'][:4]} {r['Nodule ID']}: {r['Notes']!r}" for r in rows if r["Notes"] is not None and re.search(r"AI-assisted|accepted unchanged|Added by reviewer", r["Notes"])]
+check("Notes = Daniel's own text only", not bad, "; ".join(bad) or "; ".join(f"{r['Timepoint'][:4]} {r['Nodule ID']}: {show(r['Notes'])}" for r in rows))
+
 # 11 trail
 th = [c.value for c in tr[1]]
 trail = [dict(zip(th, [c.value for c in r])) for r in tr.iter_rows(min_row=2)]
@@ -115,6 +128,9 @@ unchanged = [r for r in rows if "accepted unchanged" in str(r["Notes"])]
 covered = all(any(t["Nodule ID"] == r["Nodule ID"] and t["Timepoint"] == r["Timepoint"] and str(t["Field"]).startswith("AI draft") for t in trail) for r in rows)
 check("Edit trail: AI draft for every exported nodule", covered,
       f"{len(draft_rows)} 'AI draft' rows; AI value column filled on changed fields: {ai_shown}; nodules accepted unchanged: {len(unchanged)}")
+results_rows = [t for t in trail if t["Field"] == "Review result"]
+check("Edit trail: review result per nodule (moved from Notes)", len(results_rows) == len(rows),
+      "; ".join(f"{t['Timepoint'][:4]} {t['Nodule ID']}: {t['New value']}" for t in results_rows))
 check("Edit trail: Daniel's changes (old → new, who, when)", any(t["Changed by"] == "DR" and t["New value"] not in (None, "") for t in trail),
       "fields changed: " + ", ".join(sorted(f for f in fields if f)))
 check("Edit trail: who approved each scan", len(approved) == len(scans), "; ".join(f"{t['Timepoint']}: {t['New value']} by {t['Changed by']} at {t['Changed at']}" for t in approved))

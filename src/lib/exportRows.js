@@ -18,30 +18,36 @@ export function measurementRows(scans, nodules, events) {
   const sMap = Object.fromEntries(scans.map((s) => [s.id, s]));
   return nodules.filter((n) => sMap[n.scan] && Number(n.long_axis_mm) >= MIN_LONG_AXIS_MM).sort((a, b) => sortKey(sMap[a.scan], a).localeCompare(sortKey(sMap[b.scan], b))).map((n) => {
     const s = sMap[n.scan];
-    const edited = [...new Set(events.filter((ev) => ev.nodule === n.id && FIELD_NAMES[ev.field]).map((ev) => FIELD_NAMES[ev.field]))];
-    const tag = n.source === 'AI' ? (edited.length ? `AI-assisted; edited: ${edited.join(', ')}` : 'AI-assisted; accepted unchanged') : 'Added by reviewer';
     return [
       e(s.patient_id), d10(s.scan_date), e(s.timepoint), e(s.series_number), e(s.slice_thickness_mm), e(n.nodule_label), e(n.lobe), e(n.slice_number), e(n.type),
       n1(n.long_axis_mm), n1(n.short_axis_mm), n1(n.mean_diameter_mm), n.type === 'Part-solid' ? n1(n.solid_component_mm) : null,
-      n.outline_confirmed && !n.volume_stale && n.volume_mm3 != null ? Math.round(n.volume_mm3) : null,
+      n.outline_confirmed && n.volume_mm3 != null ? Math.round(n.volume_mm3) : null,
       s.timepoint === 'Baseline' ? null : e(n.match_to_prior), e(s.minutes_on_scan), e(s.approved_by_initials),
-      [n.notes?.trim(), tag].filter(Boolean).join('; ') || null,
+      e(n.notes?.trim()),  // Daniel's own text only
     ];
   });
 }
 
 const v1 = (v) => (v == null || v === '' ? '–' : Number(v).toFixed(1));
 // One "AI draft" row per exported nodule (what the AI proposed, before any edit), then every change in time order.
+// How each exported nodule was reviewed (was in Notes; Notes is now Daniel's text only).
+export function reviewResult(n, events) {
+  if (n.source !== 'AI') return 'Added by reviewer';
+  const edited = [...new Set(events.filter((ev) => ev.nodule === n.id && FIELD_NAMES[ev.field]).map((ev) => FIELD_NAMES[ev.field]))];
+  return edited.length ? `AI-assisted; edited: ${edited.join(', ')}` : 'AI-assisted; accepted unchanged';
+}
+
 export function trailRows(scans, events, nodules = []) {
   const sMap = Object.fromEntries(scans.map((s) => [s.id, s]));
   const head = (s, label) => [e(s.patient_id), d10(s.scan_date), e(s.timepoint), e(label)];
   const drafts = nodules.filter((n) => sMap[n.scan] && Number(n.long_axis_mm) >= MIN_LONG_AXIS_MM).sort((a, b) => sortKey(sMap[a.scan], a).localeCompare(sortKey(sMap[b.scan], b))).map((n) => {
     const s = sMap[n.scan], a = n.ai_draft || {};
-    if (n.source !== 'AI') return [...head(s, n.nodule_label), 'AI draft', 'none (added by reviewer)', null, null, e(s.engine_version) ? `AI engine ${s.engine_version}` : 'AI engine', ts(n.created_date)];
+    const result = [...head(s, n.nodule_label), 'Review result', null, null, reviewResult(n, events), e(s.approved_by_initials), ts(s.approved_at)];
+    if (n.source !== 'AI') return [[...head(s, n.nodule_label), 'AI draft', 'none (added by reviewer)', null, null, e(s.engine_version) ? `AI engine ${s.engine_version}` : 'AI engine', ts(n.created_date)], result];
     const match = a.match_label ? `suggested match ${a.match_label}` : s.timepoint === 'Baseline' ? null : 'no match suggested';
     const summary = [a.lobe, a.type, `slice ${a.key_slice_number ?? '–'}`, `long ${v1(a.long)} × short ${v1(a.short)} mm`, a.solid != null ? `solid ${v1(a.solid)} mm` : null, a.volume != null ? `volume ${Math.round(a.volume)} mm3` : null, `outline ${(a.contour || []).length} points`, match].filter(Boolean).join('; ');
-    return [...head(s, n.nodule_label), 'AI draft', summary, null, null, `AI engine ${s.engine_version || ''}`.trim(), ts(n.created_date)];
-  });
+    return [[...head(s, n.nodule_label), 'AI draft', summary, null, null, `AI engine ${s.engine_version || ''}`.trim(), ts(n.created_date)], result];
+  }).flat();
   const changes = events.filter((ev) => sMap[ev.scan]).sort((a, b) => (sortKey(sMap[a.scan], { nodule_label: '' }) + a.edited_at).localeCompare(sortKey(sMap[b.scan], { nodule_label: '' }) + b.edited_at)).map((ev) => {
     const s = sMap[ev.scan];
     return [...head(s, ev.nodule_label), ev.source ? `${ev.field} (${ev.source})` : e(ev.field), e(ev.ai_value), e(ev.old_value), e(ev.new_value), e(ev.edited_by_initials), ts(ev.edited_at)];

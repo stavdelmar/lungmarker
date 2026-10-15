@@ -6,7 +6,7 @@ import { base44 } from '@/api/base44Client';
 import { initNodules } from '@/lib/initNodules';
 import { saveNodule, approveScan } from '@/lib/edits';
 import { buildWorkbook } from '@/lib/exportWorkbook';
-import { lenMm, meanOf } from '@/lib/geometry';
+import { lenMm, meanOf, volumeAfterKeyEdit } from '@/lib/geometry';
 
 const { Scan, Nodule, EditEvent } = base44.entities;
 const me = { user: { email: 'daniel.reyes@harbor.example' }, initials: 'DR' };
@@ -40,10 +40,13 @@ export async function runScenario() {
   // N1: Daniel checks the edges, confirms the outline, accepts.
   await save(base, 'N1', { outline_confirmed: true, outline_confirmed_by_initials: 'DR', outline_confirmed_at: new Date().toISOString() });
   await save(base, 'N1', { status: 'Accepted' });
-  // N2: Daniel types a longer long axis, drags one outline point (no live engine -> volume not recomputed), confirms, accepts.
+  // N2: Daniel types a longer long axis, drags one outline point outwards (no live engine), confirms, accepts.
+  // Same steps as the Review page's onDragEnd: volume recomputed in the browser from the edited outline.
   await save(base, 'N2', { long_axis_mm: 6.8 });
   const n2 = await nod(base.id, 'N2');
-  await save(base, 'N2', { key_contour_px: n2.key_contour_px.map((p, i) => (i === 0 ? [p[0] + 3, p[1]] : p)), volume_stale: true });
+  const edited = n2.key_contour_px.map((p, i) => (i === 0 ? [p[0] + 3, p[1]] : p));
+  const vol = volumeAfterKeyEdit({ oldVolume: n2.volume_mm3, oldPoly: n2.key_contour_px, newPoly: edited, sp: SP, dz: 1.25, contoursByZ: {}, keyZ: n2.key_slice_z });
+  await save(base, 'N2', { key_contour_px: edited, volume_mm3: vol, volume_stale: false }, { source: 'points moved by hand; volume recomputed' });
   await save(base, 'N2', { outline_confirmed: true, outline_confirmed_by_initials: 'DR', outline_confirmed_at: new Date().toISOString() });
   await save(base, 'N2', { status: 'Accepted' });
   // N3: Daniel adds a small spot the AI did not mark (3.5 x 2.8 mm). Accept is disabled under 4 mm,

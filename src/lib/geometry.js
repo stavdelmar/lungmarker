@@ -58,3 +58,40 @@ export function findingPatch(f, z) {
     ...(f.solid_component_mm != null ? { solid_component_mm: r1(f.solid_component_mm) } : {}),
   };
 }
+// ---- Volume after a hand edit (browser side) ----
+// Area of a polygon in mm² (shoelace). sp = [row_mm, col_mm].
+export function polyAreaMm2(poly, sp) {
+  if (!poly || poly.length < 3) return 0;
+  let a = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [x1, y1] = toMm(poly[i], sp), [x2, y2] = toMm(poly[(i + 1) % poly.length], sp);
+    a += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(a) / 2;
+}
+
+// Distance between slices in mm: from the slice positions if the engine gives them, else the slice thickness.
+export function sliceStepMm(meta, fallback) {
+  const zs = (meta?.slices || []).map((s) => s.z_position_mm).filter((v) => v != null);
+  const d = zs.slice(1).map((v, i) => Math.abs(v - zs[i])).filter((v) => v > 0).sort((a, b) => a - b);
+  return d.length ? d[Math.floor(d.length / 2)] : Number(fallback) || null;
+}
+
+// Volume from per-slice outlines: sum of slice areas × slice step. contoursByZ = {"z": [[poly], ...]}.
+export function volumeFromContours(contoursByZ, sp, dz, keyZ, keyPoly) {
+  if (!dz) return null;
+  const byZ = { ...(contoursByZ || {}) };
+  if (keyPoly?.length > 2) byZ[String(keyZ)] = [keyPoly];
+  const total = Object.values(byZ).reduce((sum, polys) => sum + polyAreaMm2(largestPoly(polys), sp), 0);
+  return total > 0 ? Math.round(total * dz) : null;
+}
+
+// New volume after Daniel moves outline points on the key slice: keep the engine's volume for every other
+// slice and swap the key slice's share (old area → new area) × slice step. If there is no volume yet,
+// rebuild it from the per-slice outlines. Returns null only if there is nothing to measure from.
+export function volumeAfterKeyEdit({ oldVolume, oldPoly, newPoly, sp, dz, contoursByZ, keyZ }) {
+  if (!dz || !newPoly || newPoly.length < 3) return oldVolume ?? null;
+  if (oldVolume != null && polyAreaMm2(oldPoly, sp) > 0)
+    return Math.max(1, Math.round(Number(oldVolume) + (polyAreaMm2(newPoly, sp) - polyAreaMm2(oldPoly, sp)) * dz));
+  return volumeFromContours(contoursByZ, sp, dz, keyZ, newPoly);
+}

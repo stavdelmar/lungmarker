@@ -9,7 +9,7 @@ import { useSettings, useHealth } from '@/hooks/useAppData';
 import { useScanTimer } from '@/hooks/useScanTimer';
 import { initNodules } from '@/lib/initNodules';
 import { saveNodule, logEvent, approveScan } from '@/lib/edits';
-import { axesFromOutline, lenMm, meanOf, findingPatch } from '@/lib/geometry';
+import { axesFromOutline, lenMm, meanOf, findingPatch, sliceStepMm, volumeAfterKeyEdit, volumeFromContours } from '@/lib/geometry';
 import { MIN_LONG_AXIS_MM } from '@/lib/exportRows';
 import EngineOffline from '@/components/EngineOffline';
 import ReviewHeader from '@/components/review/ReviewHeader';
@@ -109,17 +109,24 @@ export default function Review() {
     const nd = { ...d, [key]: d[key].map((p, i) => (i === h.idx ? pt : p)) };
     draftRef.current = nd; return nd;
   });
-  // Hand-edited outline: ask the engine to redo the 3D outline + volume from Daniel's polygon.
-  // Without a live engine, keep his polygon and mark the volume as stale (it is then not exported).
-  const recomputeFromPolygon = (poly) => runEngine(async () => {
-    const f = await engine.refine(base, sid, { finding_id: sel.engine_finding_id || null, z: sel.key_slice_z, points: [], polygon_px: poly });
-    await save({ key_contour_px: poly, volume_mm3: f.volume_mm3 == null ? null : Math.round(f.volume_mm3), volume_stale: false, ...(f.finding_id && !sel.engine_finding_id ? { engine_finding_id: f.finding_id } : {}) }, { source: 'hand edit, volume recomputed' });
+  // Hand-edited outline → the volume is recomputed at once in the browser (engine volume for the other
+  // slices + the edited key slice), so a confirmed outline always has a volume. With a live engine, the
+  // engine then redoes the 3D outline from Daniel's polygon and its volume replaces the browser one.
+  const dz = sliceStepMm(meta, scan?.slice_thickness_mm);
+  const contoursOf = (n) => findingsById[n.engine_finding_id]?.contours || {};
+  const recomputeFromPolygon = (nid, poly) => runEngine(async () => {
+    const fresh = await Nodule.get(nid);
+    const f = await engine.refine(base, sid, { finding_id: fresh.engine_finding_id || null, z: fresh.key_slice_z, points: [], polygon_px: poly });
+    if (f.volume_mm3 != null) await saveNodule(scan, fresh, { volume_mm3: Math.round(f.volume_mm3), volume_stale: false }, me);
+    await refresh();
   });
   const onDragEnd = (h) => {
     const d = draftRef.current;
     if (h.kind === 'contour') {
-      if (refineOk && sel.engine_finding_id) recomputeFromPolygon(d.key_contour_px);
-      else save({ key_contour_px: d.key_contour_px, volume_stale: true });
+      const vol = volumeAfterKeyEdit({ oldVolume: sel.volume_mm3, oldPoly: sel.key_contour_px, newPoly: d.key_contour_px, sp, dz, contoursByZ: contoursOf(sel), keyZ: sel.key_slice_z });
+      const nid = sel.id;
+      save({ key_contour_px: d.key_contour_px, volume_mm3: vol, volume_stale: false }, { source: 'points moved by hand; volume recomputed' })
+        .then(() => { if (refineOk && sel.engine_finding_id) recomputeFromPolygon(nid, d.key_contour_px); });
     } else save({ [h.kind]: d[h.kind], [h.kind === 'long_axis_px' ? 'long_axis_mm' : 'short_axis_mm']: lenMm(d[h.kind], sp) });
   };
 
@@ -253,7 +260,11 @@ export default function Review() {
             priorLabels: priorNodules.map((p) => p.nodule_label), aiSuggest, onSave: save,
             outline: {
               refineOk: refineOk && !!meta,
-              onConfirm: () => save({ outline_confirmed: true, outline_confirmed_by_initials: me.initials, outline_confirmed_at: new Date().toISOString() }),
+              onConfirm: () => {
+                const vol = sel.volume_mm3 ?? volumeFromContours(contoursOf(sel), sp, dz, sel.key_slice_z, sel.key_contour_px);
+                if (vol == null) { setNotice('Cannot confirm: no volume could be measured from this outline. Use Fix with clicks or redraw it.'); return; }
+                save({ outline_confirmed: true, outline_confirmed_by_initials: me.initials, outline_confirmed_at: new Date().toISOString(), volume_mm3: vol, volume_stale: false });
+              },
               onReset: () => save({ key_contour_px: sel.ai_draft.contour, volume_mm3: sel.ai_draft.volume ?? null, volume_stale: false }),
               onTrim: () => { setZ(sel.key_slice_z); setMode(mode === 'trim' ? null : 'trim'); setClicks([]); },
               onGrow: () => { setZ(sel.key_slice_z); setMode(mode === 'grow' ? null : 'grow'); setClicks([]); },
