@@ -10,7 +10,7 @@ import { buildWorkbook } from '@/lib/exportWorkbook';
 import { exportable } from '@/lib/exportRows';
 import { selectForExport, markExported, sortKey, exportStatus, preselect } from '@/lib/exportSelect';
 import SummaryCards from '@/components/results/SummaryCards';
-import ChangeSummary from '@/components/results/ChangeSummary';
+import PatientChanges from '@/components/results/PatientChanges';
 import ResultDetail from '@/components/results/ResultDetail';
 
 const { Scan, Nodule, EditEvent } = base44.entities;
@@ -104,17 +104,18 @@ export default function Results() {
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
-            <tr><th className="pl-3 pr-1 py-2.5 w-8"><input type="checkbox" aria-label="Select all rows shown" checked={allVisibleOn} ref={(el) => { if (el) el.indeterminate = !allVisibleOn && someVisibleOn; }} onChange={toggleAll} className="accent-slate-900 w-4 h-4 align-middle" /></th>{['Patient', 'Timepoint', 'Nodule', 'Lobe', 'Long × short', 'Mean', 'Volume', 'Match to prior', 'Edited', 'Minutes (total · active)', 'Approved by', 'Approved at', 'Export status'].map((h) => <th key={h} className="text-left font-medium px-3 py-2.5">{h}</th>)}</tr>
+            <tr><th className="pl-3 pr-1 py-2.5 w-8"><input type="checkbox" aria-label="Select all rows shown" checked={allVisibleOn} ref={(el) => { if (el) el.indeterminate = !allVisibleOn && someVisibleOn; }} onChange={toggleAll} className="accent-slate-900 w-4 h-4 align-middle" /></th>{['Patient', 'Timepoint', 'Nodule', 'Lobe', 'Long × short', 'Mean', 'Volume', 'Match to prior', 'Edited', 'Minutes (total · active)', 'Approved by', 'Approved at', 'Export status', ''].map((h) => <th key={h} className="text-left font-medium px-3 py-2.5">{h}</th>)}</tr>
           </thead>
           <tbody>
             {visible.map((n) => { const s = sMap[n.scan]; const st = exportStatus(n); return (
-              <tr key={n.id} onClick={() => setDetail(n)} className={`border-t border-slate-100 hover:bg-slate-50 cursor-pointer ${selected.has(n.id) ? 'bg-teal-50/40' : ''}`}>
+              <tr key={n.id} onClick={() => setDetail(n)} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetail(n); } }} title="Open the details: image, AI vs final, edit history"
+                className={`group border-t border-slate-100 hover:bg-slate-50 cursor-pointer focus:outline-none focus-visible:bg-slate-100 ${selected.has(n.id) ? 'bg-teal-50/40' : ''}`}>
                 <td className="pl-3 pr-1" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Select ${s?.patient_id} ${s?.timepoint} ${n.nodule_label || ''}`} checked={selected.has(n.id)} onChange={() => toggle(n.id)} className="accent-slate-900 w-4 h-4 align-middle" /></td>
                 <td className="px-3 py-2 font-mono whitespace-nowrap">{s?.patient_id}</td><td className="px-3 whitespace-nowrap">{s?.timepoint}</td><td className="px-3 font-mono">{n.nodule_label || <span className="text-slate-500">prior {n.prior_label}</span>}</td><td className="px-3">{n.lobe}</td>
                 <td className="px-3 font-mono whitespace-nowrap">{fmt1(n.long_axis_mm)} × {fmt1(n.short_axis_mm)}</td><td className="px-3 font-mono">{fmt1(n.mean_diameter_mm)}</td>
-                <td className="px-3 font-mono">{n.outline_confirmed && n.volume_mm3 != null ? Math.round(n.volume_mm3) : '—'}</td>
+                <td className="px-3 font-mono">{n.outline_confirmed && n.volume_mm3 != null ? Math.round(n.volume_mm3) : <span className="font-sans text-[11px] text-slate-400 whitespace-nowrap">outline not confirmed</span>}</td>
                 <td className="px-3 font-mono">{s?.timepoint === 'Baseline' ? '' : n.match_to_prior || '—'}</td>
-                <td className="px-3">{n.was_edited ? <span className="text-violet-700">yes</span> : 'no'}</td>
+                <td className="px-3">{n.was_edited ? 'yes' : 'no'}</td>
                 <td className="px-3 font-mono whitespace-nowrap">{s?.minutes_on_scan ?? '—'}<span className="text-slate-400"> · {s?.active_minutes ?? '—'}</span></td>
                 <td className="px-3 font-mono">{s?.approved_by_initials}</td><td className="px-3 font-mono text-xs">{fmtDateTime(s?.approved_at)}</td>
                 <td className="px-3 text-xs whitespace-nowrap">
@@ -122,13 +123,14 @@ export default function Results() {
                     : st === 'exported' ? <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">Exported {fmtDay(n.exported_at)}</span>
                     : <span className="px-1.5 py-0.5 rounded bg-teal-100 text-teal-900">New</span>}
                 </td>
+                <td className="pr-3 text-xs text-slate-400 group-hover:text-teal-700 whitespace-nowrap">Details ›</td>
               </tr>); })}
-            {nodQ.data && nodules.length > 0 && !visible.length && <tr><td colSpan={14} className="py-8 text-center text-slate-400 text-sm">No rows in this filter.</td></tr>}
-            {nodQ.data && !nodules.length && <tr><td colSpan={14} className="py-10 text-center text-slate-400 text-sm">No accepted nodules on approved scans yet.</td></tr>}
+            {nodQ.data && nodules.length > 0 && !visible.length && <tr><td colSpan={15} className="py-8 text-center text-slate-400 text-sm">No rows in this filter.</td></tr>}
+            {nodQ.data && !nodules.length && <tr><td colSpan={15} className="py-10 text-center text-slate-400 text-sm">No accepted nodules on approved scans yet.</td></tr>}
           </tbody>
         </table>
       </div>
-      <ChangeSummary scans={shown} nodules={nodQ.data || []} />
+      <PatientChanges scans={shown} nodules={nodQ.data || []} />
       <ResultDetail n={detail} scan={detail && sMap[detail.scan]} base={settings.engine_base_url} onClose={() => setDetail(null)} />
     </div>
   );

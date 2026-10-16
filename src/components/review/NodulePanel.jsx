@@ -1,4 +1,4 @@
-import { Plus, Check, X, ChevronRight, Lock, ScanSearch, CircleCheck, Circle, LogOut, ArrowLeft } from 'lucide-react';
+import { Plus, Check, X, ChevronRight, Lock, ScanSearch, CircleCheck, Circle, LogOut, ArrowLeft, Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import NoduleList, { DoubtPills } from '@/components/review/NoduleList';
 import { VolumeConfirm, Measurements, MatchToPrior, Notes } from '@/components/review/NoduleForm';
@@ -95,7 +95,7 @@ function NoduleDetail({ sel, locked, followup, canAccept, under4, onAccept, onRe
 
 export default function NodulePanel(p) {
   const { scan, nodules, selId, sel, onSelect, locked, isReviewer, onAdd, adding, formProps, prior, followup, canAccept, under4, onAccept, onRejectClick, onNext,
-    checks, onApprove, onReopen, central, notFound, next, waitForPrior, onSaveExit } = p;
+    checks, onApprove, onReopen, central, notFound, next, waitForPrior, onSaveExit, unconfirmed = [] } = p;
   const approved = scan.review_status === 'Approved';
   const line = 'w-full flex items-center gap-2 text-sm rounded px-1.5 py-1 hover:bg-white text-left';
   return (
@@ -168,6 +168,16 @@ export default function NodulePanel(p) {
               <span className="text-slate-800">Central areas checked</span>
               <span className={`ml-auto text-xs ${central.done ? 'text-slate-500 font-mono' : 'text-amber-700'}`}>{central.done ? central.by : 'not checked →'}</span>
             </button>
+            {/* Soft reminder, never blocks: Daniel's rule records a volume only for a confirmed outline. */}
+            {unconfirmed.length > 0 && (
+              <div className="flex items-start gap-2 rounded-md bg-sky-50 border border-sky-200 px-2.5 py-1.5 text-[12px] text-sky-950">
+                <Info className="w-4 h-4 text-sky-700 shrink-0 mt-px" />
+                <span className="flex-1">
+                  {unconfirmed.length === 1 ? <><b className="font-mono">{unconfirmed[0].nodule_label}</b> has</> : <><b className="font-mono">{unconfirmed.map((n) => n.nodule_label).join(', ')}</b> have</>} no confirmed outline, so no volume will be recorded{unconfirmed.length === 1 ? ' for it' : ''}. You can still approve.
+                </span>
+                <button onClick={() => onSelect(unconfirmed[0])} className="shrink-0 text-sky-800 font-medium hover:underline whitespace-nowrap">Go to {unconfirmed[0].nodule_label} →</button>
+              </div>
+            )}
             <button onClick={onApprove} disabled={!checks.ok} className="mt-1 w-full h-10 rounded-md bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-40">
               {checks.ok ? 'Approve scan' : 'Approve scan (finish both steps first)'}
             </button>

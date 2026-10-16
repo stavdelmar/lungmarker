@@ -45,3 +45,9 @@ export function parseNum(text) {
   const v = Number(s);
   return Number.isFinite(v) ? v : undefined; // undefined = not a number → keep the old value
 }
+
+// Soft reminder before Approve (Daniel's rule: a volume is recorded only for a confirmed outline). Never blocks.
+// Accepted measured nodules whose outline is not confirmed, so their Volume cell will stay empty.
+export function unconfirmedOutlines(nodules) {
+  return nodules.filter((n) => n.status === 'Accepted' && n.kind !== 'prior_not_found' && !n.outline_confirmed);
+}

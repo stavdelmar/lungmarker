@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { fetchAll } from '@/lib/data';
 import { exportable } from '@/lib/exportRows';
+import { reviewBreakdown } from '@/lib/patientTracks';
 
 const { Nodule } = base44.entities;
 
@@ -36,10 +37,8 @@ export default function SummaryCards({ scanIds, scans = [], settings }) {
     enabled: scanIds.length > 0,
     queryFn: async () => {
       const all = await fetchAll(Nodule, { scan: { $in: scanIds } }, 'nodule_label');
-      const ai = all.filter((n) => n.source === 'AI');
-      const measured = all.filter((n) => n.status === 'Accepted' && exportable(n) && n.kind !== 'prior_not_found').length;
-      const changed = ai.filter((n) => n.was_edited).length;
-      return { measured, pct: ai.length ? Math.round((changed / ai.length) * 100) : null };
+      // Same rows as the table / Excel: accepted nodules ≥ 4 mm (plus everything Daniel rejected or added, for the breakdown).
+      return reviewBreakdown(all.filter((n) => n.status !== 'Accepted' || exportable(n)));
     },
   });
   const d = q.data;
@@ -56,8 +55,18 @@ export default function SummaryCards({ scanIds, scans = [], settings }) {
   return (
     <div className="grid grid-cols-4 gap-3">
       <Card label="Scans approved" value={scanIds.length} />
-      <Card label="Nodules measured" value={!scanIds.length ? 0 : d?.measured ?? (q.isError ? '—' : '…')} />
-      <Card label="AI nodules changed" value={d ? (d.pct == null ? '—' : `${d.pct}%`) : !scanIds.length || q.isError ? '—' : '…'} sub="by the reviewer" />
+      <Card label="Nodules measured" value={!scanIds.length ? 0 : d?.measured ?? (q.isError ? '—' : '…')}
+        sub={d && <>Volumes recorded <b className="font-mono text-slate-800">{d.volumes}</b> of <span className="font-mono">{d.measured}</span> <span className="text-slate-400">(only for confirmed outlines)</span></>} />
+      <div className="bg-white border border-slate-200 rounded-lg px-4 py-3">
+        <div className="text-[11px] uppercase tracking-wider text-slate-500">AI findings · reviewer's decision</div>
+        {d ? (
+          <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[12px]">
+            {[['Accepted unchanged', d.unchanged], ['Edited', d.edited], ['Rejected', d.rejected], ['Added by reviewer', d.added]].map(([k, v]) => (
+              <div key={k} className="flex items-baseline justify-between gap-2"><span className="text-slate-500">{k}</span><span className="font-mono text-base text-slate-900">{v}</span></div>
+            ))}
+          </div>
+        ) : <div className="font-mono text-2xl mt-1">{!scanIds.length || q.isError ? '—' : '…'}</div>}
+      </div>
       <div className="bg-white border border-slate-200 rounded-lg px-4 py-3">
         <div className="text-[11px] uppercase tracking-wider text-slate-500">Avg minutes / scan</div>
         <div className="mt-1.5 space-y-1">
