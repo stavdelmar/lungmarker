@@ -20,11 +20,20 @@ function eventBase(scan, nodule, me) {
   };
 }
 
+// "Nothing" in any form (null, '', [], {}) — a change between two of these is not a change.
+const isEmpty = (v) => v == null || v === '' || (Array.isArray(v) && !v.length) || (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length);
+const same = (a, b) => (isEmpty(a) && isEmpty(b)) || JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
 export function logEvent(scan, nodule, field, oldV, newV, me) {
+  if (same(oldV, newV)) return Promise.resolve(null); // never log a non-change (e.g. "∅ → ∅")
   return base44.entities.EditEvent.create({ ...eventBase(scan, nodule, me), field, ai_value: '', old_value: oldV ?? '', new_value: newV ?? '' });
 }
 
-export async function saveNodule(scan, nodule, patch, me, { source } = {}) {
+export async function saveNodule(scan, given, patch, me, { source } = {}) {
+  // Compare against the record as saved right now, not the page's copy: two quick edits of the same field
+  // would otherwise both log the value from before the first edit ("8.5 → 8.3" instead of "39.2 → 8.3").
+  let nodule = given;
+  try { const fresh = await base44.entities.Nodule.get(given.id); if (fresh?.id) nodule = fresh; } catch { /* fall back to the given copy */ }
   const p = { ...patch };
   if ('long_axis_mm' in p || 'short_axis_mm' in p)
     p.mean_diameter_mm = meanOf(p.long_axis_mm ?? nodule.long_axis_mm, p.short_axis_mm ?? nodule.short_axis_mm);
@@ -37,7 +46,7 @@ export async function saveNodule(scan, nodule, patch, me, { source } = {}) {
   const events = [];
   Object.keys(p).forEach((k) => {
     if (SKIP.includes(k)) return;
-    if (JSON.stringify(nodule[k] ?? null) === JSON.stringify(p[k] ?? null)) return;
+    if (same(nodule[k], p[k])) return;
     const field = k === 'key_contour_px' || k === 'contour_edits' ? 'outline' : k;
     // An outline change is described by how it was made, since "16 points → 16 points" says nothing.
     const newV = field === 'outline' ? `${fmtVal(k, p[k])}, ${source || 'points moved by hand'}` : fmtVal(k, p[k]);

@@ -9,6 +9,24 @@ function datesToExcel(XLSX, ws, nRows) {
   }
 }
 
+// Edit trail "Changed at" (last column): local "yyyy-mm-dd hh:mm" → a real Excel date-time (no time zone in Excel).
+function dateTimesToExcel(XLSX, ws, nRows, c) {
+  for (let r = 1; r <= nRows; r++) {
+    const ref = XLSX.utils.encode_cell({ r, c }), cell = ws[ref];
+    const m = cell && typeof cell.v === 'string' && cell.v.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/);
+    if (m) ws[ref] = { t: 'n', v: Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) / 86400000 + 25569, z: 'yyyy-mm-dd hh:mm' };
+  }
+}
+
+// The exporting computer's time zone, e.g. "Europe/Madrid (UTC+02:00)", for the Read me sheet.
+export function timeZoneLabel(at = new Date()) {
+  let name = '';
+  try { name = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { /* old browser */ }
+  const off = -at.getTimezoneOffset(), sign = off >= 0 ? '+' : '-', a = Math.abs(off);
+  const utc = `UTC${sign}${String(Math.floor(a / 60)).padStart(2, '0')}:${String(a % 60).padStart(2, '0')}`;
+  return name ? `${name} (${utc})` : utc;
+}
+
 // Builds the 3-sheet export workbook. Used by the Export page and by tests/export.
 // nodules = the Accepted nodules of the selected (approved) scans.
 export function buildWorkbook(XLSX, { scans, nodules, events, initials, date }) {
@@ -22,6 +40,7 @@ export function buildWorkbook(XLSX, { scans, nodules, events, initials, date }) 
   const readme = XLSX.utils.aoa_to_sheet([
     [`Exported from LungMarker on ${date} by ${initials}. For research use only. Not for clinical use. AI drafts by engine version ${versions}; every row was reviewed and approved by the person in 'Measured by'.`],
     [`${meas.length} row(s): ${meas.length - updated.length} new, ${updated.length} updated.`],
+    [`Times in the Edit trail ("Changed at") are local time, ${timeZoneLabel()}: the time shown in the app on the computer that exported this file.`],
     ...(updated.length ? [[], ['UPDATED ROWS — already in the master sheet from an earlier export. Replace the old row, do not add a second one:'], ...updated] : []),
   ]);
   const wb = XLSX.utils.book_new();
@@ -29,6 +48,7 @@ export function buildWorkbook(XLSX, { scans, nodules, events, initials, date }) 
   const trail = trailRows(scans, events, nodules);
   const wsTrail = XLSX.utils.aoa_to_sheet([TRAIL_HEADERS, ...trail]);
   datesToExcel(XLSX, wsTrail, trail.length);
+  dateTimesToExcel(XLSX, wsTrail, trail.length, TRAIL_HEADERS.length - 1);
   XLSX.utils.book_append_sheet(wb, wsTrail, 'Edit trail');
   XLSX.utils.book_append_sheet(wb, readme, 'Read me');
   return wb;

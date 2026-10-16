@@ -45,6 +45,11 @@ export async function runScenario() {
   // N2: Daniel types a longer long axis, drags one outline point outwards (no live engine), confirms, accepts.
   // Same steps as the Review page's onDragEnd: volume recomputed in the browser from the edited outline.
   await save(base, 'N2', { long_axis_mm: 6.8 });
+  // Stav's case (16 Oct): a typo then the fix, both from the page's copy of N2 taken before the first edit.
+  // The trail must read 5.15 → 39.2, then 39.2 → 5.15 (not 5.15 → 5.15).
+  const n2Stale = await nod(base.id, 'N2');
+  await saveNodule(base, n2Stale, { short_axis_mm: 39.2 }, me);
+  await saveNodule(base, n2Stale, { short_axis_mm: 5.15 }, me);
   const n2 = await nod(base.id, 'N2');
   const edited = n2.key_contour_px.map((p, i) => (i === 0 ? [p[0] + 3, p[1]] : p));
   const vol = volumeAfterKeyEdit({ oldVolume: n2.volume_mm3, oldPoly: n2.key_contour_px, newPoly: edited, sp: SP, dz: 1.25, contoursByZ: {}, keyZ: n2.key_slice_z });

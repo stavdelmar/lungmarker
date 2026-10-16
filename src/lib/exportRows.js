@@ -7,7 +7,15 @@ const FIELD_NAMES = { long_axis_mm: 'long axis', short_axis_mm: 'short axis', ou
 const n1 = (v) => (v == null || v === '' ? null : Number(Number(v).toFixed(1)));
 const e = (v) => (v == null || v === '' ? null : v);
 const d10 = (v) => (v ? String(v).slice(0, 10) : null);
-const ts = (v) => (v ? new Date(v).toISOString().slice(0, 16).replace('T', ' ') : null);
+// Trail times in the exporting computer's local time ("yyyy-mm-dd hh:mm"), the time Daniel saw in the app.
+// The workbook turns them into real Excel date-times; the Read me sheet names the time zone.
+const pad = (x) => String(x).padStart(2, '0');
+export const localStamp = (v) => {
+  if (!v) return null;
+  const d = new Date(v);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+const ts = localStamp;
 export const MIN_LONG_AXIS_MM = 4; // Daniel measures nodules of 4 mm and up
 export const isNotFound = (n) => n.kind === 'prior_not_found';
 // Rows that go to the sheet: measured nodules ≥ 4 mm, plus confirmed "not found" prior nodules (no size).

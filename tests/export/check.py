@@ -164,6 +164,31 @@ check("Daily export: no duplicates, changed row re-exported, nothing twice", ok,
 check("Re-exported row is flagged as UPDATED in the Read me sheet", any("UPDATED" in l for l in daily[2]["readme"]) and not any("UPDATED" in l for l in daily[1]["readme"]),
       f"Oct 17 Read me: {' / '.join(daily[2]['readme'])}")
 
+# 11 / 12 / 13: edit-trail rows (Stav, 16 Oct)
+import datetime as _dt
+th = [c.value for c in tr[1]]
+trows = [dict(zip(th, [c.value for c in r])) for r in tr.iter_rows(min_row=2)]
+ch_col = th.index("Changed at") + 1
+ch_cells = [tr.cell(row=i, column=ch_col) for i in range(2, tr.max_row + 1)]
+ch_vals = [c for c in ch_cells if c.value not in (None, "")]
+check("Edit trail times = real Excel date-times (local), format yyyy-mm-dd hh:mm", ch_vals and all(isinstance(c.value, _dt.datetime) and c.number_format == "yyyy-mm-dd hh:mm" for c in ch_vals),
+      f"{len(ch_vals)} timed rows; e.g. {ch_vals[-1].value} as {ch_vals[-1].number_format}" if ch_vals else "no timed rows")
+rm = [c.value for c in wb["Read me"]["A"] if c.value]
+tzl = [l for l in rm if "local time" in str(l)]
+check("Read me states the time zone of the trail times", bool(tzl) and "UTC" in tzl[0], tzl[0] if tzl else "no time-zone line")
+empty = [t for t in trows if t["Field"] not in ("AI draft", "Review result") and t["Previous value"] in (None, "") and t["New value"] in (None, "")]
+check("Edit trail has no non-changes (∅ → ∅)", not empty, f"{len(empty)} empty change row(s)" + (": " + ", ".join(f"{t['Nodule ID']} {t['Field']}" for t in empty[:5]) if empty else ""))
+chain_bad, chains = [], {}
+for t in trows:
+    if t["Field"] in ("AI draft", "Review result") or str(t["Field"]).startswith("outline") or not t["Nodule ID"]:
+        continue
+    k = (t["Timepoint"], t["Nodule ID"], t["Field"])
+    if k in chains and str(chains[k] or "") != str(t["Previous value"] or ""):
+        chain_bad.append(f"{k[1]} {k[2]}: previous {t['Previous value']!r} but last new value was {chains[k]!r}")
+    chains[k] = t["New value"]
+multi = sum(1 for k in chains if sum(1 for t in trows if (t["Timepoint"], t["Nodule ID"], t["Field"]) == k) > 1)
+check("Repeated edits: each Previous value = the value just before it", not chain_bad, "; ".join(chain_bad) or f"{multi} field(s) edited more than once, all chained correctly")
+
 w = max(len(n) for n, _, _ in results)
 for n, ok, ev in results:
     print(f"{'PASS' if ok else 'FAIL'}  {n.ljust(w)}  │ {ev}")
