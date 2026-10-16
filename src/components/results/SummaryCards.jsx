@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { fetchAll } from '@/lib/data';
+import { exportable } from '@/lib/exportRows';
 
 const { Nodule } = base44.entities;
 
@@ -27,16 +29,17 @@ function avgMinutes(scans) {
 }
 
 export default function SummaryCards({ scanIds, scans = [], settings }) {
+  // Counted from the nodule rows themselves (same fetch as the Results table). Nodule.count() never resolved on the
+  // live app, so the cards stayed on "…".
   const q = useQuery({
     queryKey: ['resultsSummary', scanIds.join(',')],
+    enabled: scanIds.length > 0,
     queryFn: async () => {
-      const inScans = { scan: { $in: scanIds } };
-      const [measured, aiTotal, aiChanged] = await Promise.all([
-        Nodule.count({ ...inScans, status: 'Accepted' }),
-        Nodule.count({ ...inScans, source: 'AI' }),
-        Nodule.count({ ...inScans, source: 'AI', was_edited: true }),
-      ]);
-      return { measured, pct: aiTotal ? Math.round((aiChanged / aiTotal) * 100) : null };
+      const all = await fetchAll(Nodule, { scan: { $in: scanIds } }, 'nodule_label');
+      const ai = all.filter((n) => n.source === 'AI');
+      const measured = all.filter((n) => n.status === 'Accepted' && exportable(n) && n.kind !== 'prior_not_found').length;
+      const changed = ai.filter((n) => n.was_edited).length;
+      return { measured, pct: ai.length ? Math.round((changed / ai.length) * 100) : null };
     },
   });
   const d = q.data;
@@ -53,8 +56,8 @@ export default function SummaryCards({ scanIds, scans = [], settings }) {
   return (
     <div className="grid grid-cols-4 gap-3">
       <Card label="Scans approved" value={scanIds.length} />
-      <Card label="Nodules measured" value={d?.measured ?? '…'} />
-      <Card label="AI nodules changed" value={d ? (d.pct == null ? '—' : `${d.pct}%`) : '…'} sub="by the reviewer" />
+      <Card label="Nodules measured" value={!scanIds.length ? 0 : d?.measured ?? (q.isError ? '—' : '…')} />
+      <Card label="AI nodules changed" value={d ? (d.pct == null ? '—' : `${d.pct}%`) : !scanIds.length || q.isError ? '—' : '…'} sub="by the reviewer" />
       <div className="bg-white border border-slate-200 rounded-lg px-4 py-3">
         <div className="text-[11px] uppercase tracking-wider text-slate-500">Avg minutes / scan</div>
         <div className="mt-1.5 space-y-1">

@@ -89,13 +89,17 @@ export default function ViewerPane(p) {
           <input type="checkbox" checked={showRejected} onChange={(e) => setShowRejected(e.target.checked)} className="accent-teal-400" /> Show rejected
         </label>
         {busy && <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-300 ml-2" />}
-        <div className="ml-auto flex items-center gap-4 font-mono">
-          {isKey && draft && <span className="text-fuchsia-300">L {fmtMaybe(lenMm(draft.long_axis_px, sp))} · S {fmtMaybe(lenMm(draft.short_axis_px, sp))} mm</span>}
-          <span>Slice #{sliceNo} <span className="text-neutral-500">({z + 1}/{n})</span></span>
-        </div>
       </div>
       {modeBar}
       <div className="flex flex-1 min-h-0">
+        <div className="relative flex flex-1 min-w-0">
+        {/* Corner read-out on the image, as in CT viewers: slice number, window, and the selected nodule's axes. */}
+        <div className="absolute left-3 top-2 z-10 pointer-events-none font-mono text-[12px] leading-5 text-neutral-200 [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">
+          <div>Slice #{sliceNo} <span className="text-neutral-400">({z + 1}/{n})</span></div>
+          <div className="text-neutral-400">{win.charAt(0).toUpperCase() + win.slice(1)} window</div>
+          {sel && <div className="text-teal-300">{sel.nodule_label}{isKey ? '' : <span className="text-neutral-400"> · key slice #{meta.slices?.find((s) => s.z === sel.key_slice_z)?.slice_number ?? (sel.key_slice_z ?? 0) + 1}</span>}</div>}
+          {isKey && draft && <div className="text-fuchsia-300">L {fmtMaybe(lenMm(draft.long_axis_px, sp))} · S {fmtMaybe(lenMm(draft.short_axis_px, sp))} mm</div>}
+        </div>
         <Viewer src={engine.sliceUrl(base, sid, win, z)} cols={meta.cols} rows={meta.rows} zoom={zoom} setZoom={setZoom} pan={pan} setPan={setPan}
           onStep={step} onImageClick={onImageClick} onDrag={onDrag} onDragEnd={onDragEnd} cursor={mode === 'erase' ? 'none' : mode ? 'crosshair' : 'default'}
           strokeMode={strokeMode} onStrokeEnd={onStrokeEnd} focus={focus}>
@@ -104,6 +108,7 @@ export default function ViewerPane(p) {
               startDrag={startDrag} onSelect={onSelect} clicks={clicks} interactive={!mode} tool={mode} stroke={stroke} hover={hover} brushPx={brushPx} />
           )}
         </Viewer>
+        </div>
         <SliceSlider z={z} n={n} onChange={setZ}
           ticks={nodules.filter((x) => x.key_slice_z != null && (showRejected || x.status !== 'Rejected')).map((x) => ({ id: x.id, z: x.key_slice_z, label: x.nodule_label, sel: x.id === sel?.id }))} />
       </div>
