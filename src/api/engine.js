@@ -1,5 +1,14 @@
 // All calls to the external AI engine live here so it can be swapped later.
-const trim = (b) => (b || '').replace(/\/+$/, '');
+// Accepts the engine URL in any natural form and returns the root the paths below hang off:
+// "https://host", "https://host/", "https://host/api/v1", "https://host/api/v1/", even a pasted
+// ".../api/v1/health.json". Works for any static host (S3, GitHub, a server) — nothing host-specific.
+export const engineRoot = (b) => String(b || '').trim()
+  .replace(/[?#].*$/, '')
+  .replace(/\/(health|scans)\.json$/i, '')
+  .replace(/\/+$/, '')
+  .replace(/\/api\/v1$/i, '')
+  .replace(/\/+$/, '');
+const trim = engineRoot;
 
 async function req(url, opts) {
   let res;

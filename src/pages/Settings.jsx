@@ -40,7 +40,7 @@ export default function Settings() {
       <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
       <section className="bg-white border border-slate-200 rounded-lg p-5 space-y-4">
         <label className="block text-sm">Engine base URL
-          <div className="flex gap-2"><input className={`${input} font-mono`} value={f.engine_base_url || ''} onChange={set('engine_base_url')} placeholder="https://engine.example.org" />
+          <div className="flex gap-2"><input className={`${input} font-mono`} value={f.engine_base_url || ''} onChange={set('engine_base_url')} placeholder="https://…/api/v1" />
             <button onClick={runTest} className="mt-1 h-9 px-3 rounded-md border border-slate-300 text-sm whitespace-nowrap hover:bg-slate-50">Test connection</button></div>
         </label>
         {test?.loading && <div className="text-xs text-slate-500">Testing…</div>}
