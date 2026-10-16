@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
@@ -8,6 +8,8 @@ import { useMe } from '@/hooks/useMe';
 import { useSettings, useHealth } from '@/hooks/useAppData';
 import { useScanTimer } from '@/hooks/useScanTimer';
 import { initNodules, initNotFound } from '@/lib/initNodules';
+import { priorOf, isApproved, nextScanForPatient, nextPatient } from '@/lib/patients';
+import { fetchAll } from '@/lib/data';
 import { saveNodule, logEvent, approveScan, markCentralChecked } from '@/lib/edits';
 import { axesFromOutline, lenMm, meanOf, findingPatch, sliceStepMm, volumeAfterKeyEdit, volumeFromContours, sliceContour, allSliceContours, slicePatch, drawnSlices, interpolateSlices, handVolumeReady } from '@/lib/geometry';
 import { brushEdit, lassoToPoly } from '@/lib/maskEdit';
@@ -21,7 +23,14 @@ import RejectDialog from '@/components/review/RejectDialog';
 
 const { Scan, Nodule } = base44.entities;
 
+// Keyed by scan id: going to the next scan of a patient remounts the page, so the timer, the
+// first-open setup and the selection are per scan (no state carried over from the previous scan).
 export default function Review() {
+  const { id } = useParams();
+  return <ReviewScan key={id} />;
+}
+
+function ReviewScan() {
   const { id } = useParams();
   const me = useMe();
   const qc = useQueryClient();
@@ -34,7 +43,10 @@ export default function Review() {
   const metaQ = useQuery({ queryKey: ['meta', base, sid], enabled: !!base && !!sid, retry: false, queryFn: () => engine.meta(base, sid) });
   const findQ = useQuery({ queryKey: ['findings', base, sid], enabled: !!base && !!sid, retry: false, queryFn: () => engine.findings(base, sid) });
   const nodQ = useQuery({ queryKey: ['nodules', id], enabled: !!scan, queryFn: async () => (await Nodule.filter({ scan: id }, { sort: 'key_slice_z', limit: 500 })).items });
-  const priorId = scan?.prior_engine_scan_id;
+  // This patient's scans: the prior is linked (engine link, else the previous timepoint), and "next scan" uses them.
+  const patientQ = useQuery({ queryKey: ['patientScans', scan?.patient_id], enabled: !!scan, queryFn: () => fetchAll(Scan, { patient_id: scan.patient_id }, 'scan_date') });
+  const priorScanLinked = scan && patientQ.data ? priorOf(scan, patientQ.data) : null;
+  const priorId = scan?.prior_engine_scan_id || priorScanLinked?.engine_scan_id;
   const priorQ = useQuery({
     queryKey: ['prior', priorId], enabled: !!priorId,
     queryFn: async () => {
@@ -79,11 +91,17 @@ export default function Review() {
     draftRef.current = d; setDraft(d);
   }, [sel?.id, sel?.updated_date]);
 
-  const timer = useScanTimer({ scanId: scan?.id, initial: scan?.active_seconds, initialTotal: scan?.total_seconds, enabled: !!scan && me.isReviewer && !approved, idleSeconds: settings?.idle_pause_seconds || 120 });
 
+  // A follow-up starts only once its prior is approved: Match to prior and the "not found?" checks need the prior's
+  // confirmed nodules. Daniel can still choose to go on (then matches come only from the AI's own prior findings).
+  const [forceStart, setForceStart] = useState(false);
+  const priorScanNow = priorQ.data?.scan || priorScanLinked;
+  const waitForPrior = !!scan && scan.timepoint !== 'Baseline' && scan.review_status === 'Not started' && !!priorScanNow && !isApproved(priorScanNow) && !forceStart;
+  const nav = useNavigate();
+  const timer = useScanTimer({ scanId: scan?.id, initial: scan?.active_seconds, initialTotal: scan?.total_seconds, enabled: !!scan && me.isReviewer && !approved && !waitForPrior, idleSeconds: settings?.idle_pause_seconds || 120 });
   const initRef = useRef(false);
   useEffect(() => {
-    if (initRef.current || !scan || !me.isReviewer || scan.review_status !== 'Not started' || !nodQ.data || !findQ.data || health.isLoading || (priorId && !priorQ.data)) return;
+    if (initRef.current || !scan || !me.isReviewer || scan.review_status !== 'Not started' || !nodQ.data || !findQ.data || health.isLoading || (priorId && !priorQ.data) || waitForPrior) return;
     initRef.current = true;
     (async () => {
       const findings = findQ.data.findings || [];
@@ -94,7 +112,7 @@ export default function Review() {
       await Scan.update(scan.id, { review_status: 'In review', first_opened_at: scan.first_opened_at || new Date().toISOString(), ai_findings_count: findings.length, engine_version: health.data?.engine_version || scan.engine_version || '' });
       qc.invalidateQueries({ queryKey: ['nodules', id] }); qc.invalidateQueries({ queryKey: ['scan', id] });
     })();
-  }, [scan, me.isReviewer, nodQ.data, findQ.data, health.isLoading, priorQ.data]);
+  }, [scan, me.isReviewer, nodQ.data, findQ.data, health.isLoading, priorQ.data, waitForPrior]);
 
   const select = (n) => { setSelId(n.id); if (n.key_slice_z != null) setZ(n.key_slice_z); setMode(null); setClicks([]); };
   useEffect(() => { if (!selId && nodules.length) select(nodules[0]); }, [nodules.length]);
@@ -273,7 +291,11 @@ export default function Review() {
     if (!centralDone || !allDone) return;
     await approveScan(scan, timer.getSecs(), me, timer.getTotal());
     qc.invalidateQueries({ queryKey: ['scan', id] }); qc.invalidateQueries({ queryKey: ['approvedScans'] }); qc.invalidateQueries({ queryKey: ['resultNodules'] });
+    qc.invalidateQueries({ queryKey: ['patientScans', scan.patient_id] }); qc.invalidateQueries({ queryKey: ['scans'] });
   };
+  const allScansQ = useQuery({ queryKey: ['scans'], enabled: approved, queryFn: () => fetchAll(Scan, {}, 'patient_id') });
+  const nextForPatient = approved && patientQ.data ? nextScanForPatient(scan, patientQ.data.map((s) => (s.id === scan.id ? scan : s))) : null;
+  const nextPat = approved && !nextForPatient && allScansQ.data ? nextPatient(allScansQ.data.map((s) => (s.id === scan.id ? scan : s)), scan.patient_id) : null;
   const reopen = async () => {
     await Scan.update(scan.id, { review_status: 'In review' });
     await logEvent(scan, null, 'scan_approved', 'Approved', 'Reopened', me);
@@ -328,7 +350,7 @@ export default function Review() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-72px)]">
-      <ReviewHeader scan={scan} timer={timer} showTimer={me.isReviewer && !approved} readOnly={locked} />
+      <ReviewHeader scan={scan} timer={timer} showTimer={me.isReviewer && !approved && !waitForPrior} readOnly={locked} prior={scan.timepoint !== 'Baseline' ? (priorScanNow || null) : undefined} onOpenPrior={() => priorScanNow && nav(`/review/${priorScanNow.id}`)} />
       <div className="flex flex-1 min-h-0">
         <div className="w-[65%] flex flex-col min-w-0 bg-neutral-950">
           {notice && <div className="px-3 py-2 text-xs bg-rose-950/60 text-rose-100 border-b border-rose-900 flex">{notice}<button className="ml-auto underline" onClick={() => setNotice('')}>Dismiss</button></div>}
@@ -347,6 +369,8 @@ export default function Review() {
           adding={mode === 'add'} onAdd={() => { setMode(mode === 'add' ? null : 'add'); setClicks([]); }}
           canAccept={canAccept} under4={under4} onAccept={accept}
           notFound={{ onConfirm: confirmNotFound, onHere: notFoundIsHere, onReopen: (n) => saveNodule(scan, n, { status: 'Pending', reject_reason: '', match_to_prior: '' }, me).then(refresh) }}
+          next={{ scan: nextForPatient, patient: nextPat, open: (s) => nav(`/review/${s.id}`) }}
+          waitForPrior={waitForPrior ? { prior: priorScanNow, open: () => nav(`/review/${priorScanNow.id}`), goOn: () => setForceStart(true) } : null}
           central={{ done: centralDone, by: scan.central_checked_by_initials, at: scan.central_checked_at, onCheck: () => checkCentral(true), onUndo: () => checkCentral(false),
             onMediastinal: (meta?.windows || []).includes('mediastinal') ? () => setWin('mediastinal') : null, win }} onRejectClick={() => setRejectOpen(true)} onNext={next} allDone={allDone} onApprove={approve} onReopen={reopen}
           prior={{ base, priorScan: priorQ.data?.scan, priorNodules }}

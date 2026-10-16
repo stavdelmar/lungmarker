@@ -10,16 +10,27 @@ import { uncertainty } from '@/lib/uncertainty';
 const b = 'h-8 px-3 rounded-md text-sm flex items-center gap-1.5 disabled:opacity-40';
 
 export default function NodulePanel(p) {
-  const { scan, nodules, sel, onSelect, locked, isReviewer, onAdd, adding, formProps, prior, followup, canAccept, under4, onAccept, onRejectClick, onNext, allDone, onApprove, onReopen, central, notFound } = p;
+  const { scan, nodules, sel, onSelect, locked, isReviewer, onAdd, adding, formProps, prior, followup, canAccept, under4, onAccept, onRejectClick, onNext, allDone, onApprove, onReopen, central, notFound, next, waitForPrior } = p;
   const decided = nodules.filter((n) => n.status === 'Accepted' || n.status === 'Rejected').length;
   const approved = scan.review_status === 'Approved';
   return (
     <aside className="w-[35%] min-w-[420px] border-l border-slate-200 bg-white flex flex-col min-h-0">
       <div className="h-10 flex items-center px-4 border-b border-slate-100">
         <span className="text-[11px] uppercase tracking-wider text-slate-500">Nodules <span className="font-mono">({nodules.length})</span></span>
-        {!locked && <button onClick={onAdd} className={`ml-auto text-xs flex items-center gap-1 px-2 h-7 rounded ${adding ? 'bg-teal-600 text-white' : 'text-teal-700 hover:bg-teal-50'}`}><Plus className="w-3.5 h-3.5" />Add nodule</button>}
+        {!locked && !waitForPrior && <button onClick={onAdd} className={`ml-auto text-xs flex items-center gap-1 px-2 h-7 rounded ${adding ? 'bg-teal-600 text-white' : 'text-teal-700 hover:bg-teal-50'}`}><Plus className="w-3.5 h-3.5" />Add nodule</button>}
       </div>
       <div className="flex-1 overflow-y-auto">
+        {waitForPrior && (
+          <div className="m-4 rounded-lg border-2 border-amber-400 bg-amber-50 p-4 space-y-3 text-sm text-amber-950">
+            <div className="font-semibold">The {waitForPrior.prior.timepoint} isn't approved yet</div>
+            <p className="text-[13px]">Match to prior and the "not found in this scan?" checks use the prior scan's approved nodules. Review the {waitForPrior.prior.timepoint} ({waitForPrior.prior.scan_date?.slice(0, 10)}, series {waitForPrior.prior.series_number ?? '—'}) first.</p>
+            <div className="flex gap-2">
+              <button onClick={waitForPrior.open} className="h-9 px-3 rounded-md bg-teal-600 text-white hover:bg-teal-700 flex items-center gap-1">Open {waitForPrior.prior.timepoint}<ChevronRight className="w-4 h-4" /></button>
+              <button onClick={waitForPrior.goOn} className="h-9 px-3 rounded-md border border-amber-300 bg-white hover:bg-amber-100">Review this one anyway</button>
+            </div>
+            <p className="text-[11.5px] text-amber-800">"Anyway" uses the AI's prior findings, not your approved ones. The timer starts once you begin.</p>
+          </div>
+        )}
         <div className="max-h-56 overflow-y-auto border-b border-slate-100"><NoduleList nodules={nodules} selId={sel?.id} onSelect={onSelect} /></div>
         {sel && sel.kind === 'prior_not_found' && (
           <div className="p-4"><NotFoundCard n={sel} locked={locked} prior={prior} onConfirm={notFound.onConfirm} onHere={notFound.onHere} onReopen={notFound.onReopen} /></div>
@@ -60,7 +71,22 @@ export default function NodulePanel(p) {
             <Link to="/results" className="ml-auto text-teal-700 hover:underline whitespace-nowrap">See in Results →</Link>
             {isReviewer && <button onClick={onReopen} className="h-8 px-3 rounded-md border border-slate-300 bg-white text-sm hover:bg-slate-100">Reopen</button>}
           </div>
-        ) : isReviewer ? (
+        ) : null}
+        {approved && isReviewer && next && (next.scan ? (
+          <button onClick={() => next.open(next.scan)} className="mt-2.5 w-full h-10 rounded-md bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 flex items-center justify-center gap-1.5">
+            Next scan for this patient: {next.scan.timepoint} <span className="font-mono text-xs opacity-80">{next.scan.scan_date?.slice(0, 10)}</span><ChevronRight className="w-4 h-4" />
+          </button>
+        ) : (
+          <div className="mt-2.5 flex items-center gap-2 text-sm">
+            <CircleCheck className="w-5 h-5 text-emerald-600" /><span>All scans of <span className="font-mono">{scan.patient_id}</span> approved.</span>
+            {next.patient
+              ? <button onClick={() => next.open(next.patient.scan)} className="ml-auto h-8 px-3 rounded-md bg-teal-600 text-white text-sm hover:bg-teal-700 flex items-center gap-1">Next patient: <span className="font-mono">{next.patient.patient_id}</span><ChevronRight className="w-4 h-4" /></button>
+              : <Link to="/" className="ml-auto text-teal-700 hover:underline">Worklist is done →</Link>}
+          </div>
+        ))}
+        {approved ? (
+          null
+        ) : isReviewer && !waitForPrior ? (
           <div className="space-y-2.5">
             <div className="text-[11px] uppercase tracking-wider text-slate-500">Before approving</div>
             {/* Step 1: every nodule decided */}
@@ -105,7 +131,7 @@ export default function NodulePanel(p) {
               {allDone && central?.done ? 'Approve scan' : 'Approve scan (finish the steps above first)'}
             </button>
           </div>
-        ) : <div className="text-xs text-slate-500 text-center">Read-only access</div>}
+        ) : waitForPrior ? null : <div className="text-xs text-slate-500 text-center">Read-only access</div>}
       </div>
     </aside>
   );
