@@ -8,7 +8,7 @@ import { useMe } from '@/hooks/useMe';
 import { useSettings, useHealth } from '@/hooks/useAppData';
 import { useScanTimer } from '@/hooks/useScanTimer';
 import { initNodules } from '@/lib/initNodules';
-import { saveNodule, logEvent, approveScan } from '@/lib/edits';
+import { saveNodule, logEvent, approveScan, markCentralChecked } from '@/lib/edits';
 import { axesFromOutline, lenMm, meanOf, findingPatch, sliceStepMm, volumeAfterKeyEdit, volumeFromContours, sliceContour, allSliceContours, slicePatch, drawnSlices, interpolateSlices, handVolumeReady } from '@/lib/geometry';
 import { brushEdit, lassoToPoly } from '@/lib/maskEdit';
 import { MIN_LONG_AXIS_MM } from '@/lib/exportRows';
@@ -226,7 +226,14 @@ export default function Review() {
   const reject = async (reason) => { await save({ status: 'Rejected', reject_reason: reason }); next(); };
   const allDone = nodules.every((n) => n.status === 'Accepted' || n.status === 'Rejected');
 
+  // Required step before approval: the AI misses central tumours (hilum / mediastinum), so Daniel confirms he checked there.
+  const centralDone = !!scan?.central_checked_at;
+  const checkCentral = async (done) => {
+    await markCentralChecked(scan, me, done);
+    qc.invalidateQueries({ queryKey: ['scan', id] });
+  };
   const approve = async () => {
+    if (!centralDone || !allDone) return;
     await approveScan(scan, timer.getSecs(), me);
     qc.invalidateQueries({ queryKey: ['scan', id] }); qc.invalidateQueries({ queryKey: ['approvedScans'] }); qc.invalidateQueries({ queryKey: ['resultNodules'] });
   };
@@ -301,7 +308,9 @@ export default function Review() {
         </div>
         <NodulePanel scan={scan} nodules={nodules} sel={sel} onSelect={select} locked={locked} isReviewer={me.isReviewer} followup={followup}
           adding={mode === 'add'} onAdd={() => { setMode(mode === 'add' ? null : 'add'); setClicks([]); }}
-          canAccept={canAccept} under4={under4} onAccept={accept} onRejectClick={() => setRejectOpen(true)} onNext={next} allDone={allDone} onApprove={approve} onReopen={reopen}
+          canAccept={canAccept} under4={under4} onAccept={accept}
+          central={{ done: centralDone, by: scan.central_checked_by_initials, at: scan.central_checked_at, onCheck: () => checkCentral(true), onUndo: () => checkCentral(false),
+            onMediastinal: (meta?.windows || []).includes('mediastinal') ? () => setWin('mediastinal') : null, win }} onRejectClick={() => setRejectOpen(true)} onNext={next} allDone={allDone} onApprove={approve} onReopen={reopen}
           prior={{ base, priorScan: priorQ.data?.scan, priorNodules }}
           formProps={{
             priorLabels: priorNodules.map((p) => p.nodule_label), aiSuggest, onSave: save,

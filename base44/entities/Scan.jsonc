@@ -59,6 +59,14 @@
     "ai_findings_count": {
       "type": "number"
     },
+    "central_checked_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the reviewer confirmed they checked the hilum / mediastinum (required before approval)"
+    },
+    "central_checked_by_initials": {
+      "type": "string"
+    },
     "exported_at": {
       "type": "string",
       "format": "date-time"

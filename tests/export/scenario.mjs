@@ -4,7 +4,7 @@
 import * as XLSX from 'xlsx';
 import { base44 } from '@/api/base44Client';
 import { initNodules } from '@/lib/initNodules';
-import { saveNodule, approveScan } from '@/lib/edits';
+import { saveNodule, approveScan, markCentralChecked } from '@/lib/edits';
 import { buildWorkbook } from '@/lib/exportWorkbook';
 import { selectForExport, markExported } from '@/lib/exportSelect';
 import { measurementRows } from '@/lib/exportRows';
@@ -57,6 +57,7 @@ export async function runScenario() {
   await save(base, 'N3', { status: 'Rejected', reject_reason: 'Under 4 mm' });
   await addByHand(base, 60, 61, [[380, 100], [385, 100]], [[382.5, 98], [382.5, 102]]);
   await save(base, 'N4', { status: 'Accepted' });
+  await markCentralChecked(base, me); // required step: hilum / mediastinum checked
   await approveScan(base, 1980, me); // timer: 33:00 of active time
 
   // Day 1: Daniel presses "Export to Excel" in Results with "Only rows not exported yet" (the default).
@@ -92,6 +93,7 @@ export async function runScenario() {
   await save(fu, 'N2', { match_to_prior: 'N/A' });
   await save(fu, 'N2', { notes: 'New since prior, faint' });
   await save(fu, 'N2', { status: 'Accepted' });
+  await markCentralChecked(fu, me);
   await approveScan(fu, 1500, me); // 25:00
   // Day 2: export again (default "only new"): should hold only the follow-up rows.
   await exportPending(16);

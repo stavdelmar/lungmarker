@@ -1,4 +1,4 @@
-import { Plus, Check, X, ChevronRight, Lock } from 'lucide-react';
+import { Plus, Check, X, ChevronRight, Lock, ScanSearch, CircleCheck, Circle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import NoduleList from '@/components/review/NoduleList';
 import NoduleForm from '@/components/review/NoduleForm';
@@ -7,7 +7,8 @@ import PriorBox from '@/components/review/PriorBox';
 const b = 'h-8 px-3 rounded-md text-sm flex items-center gap-1.5 disabled:opacity-40';
 
 export default function NodulePanel(p) {
-  const { scan, nodules, sel, onSelect, locked, isReviewer, onAdd, adding, formProps, prior, followup, canAccept, under4, onAccept, onRejectClick, onNext, allDone, onApprove, onReopen } = p;
+  const { scan, nodules, sel, onSelect, locked, isReviewer, onAdd, adding, formProps, prior, followup, canAccept, under4, onAccept, onRejectClick, onNext, allDone, onApprove, onReopen, central } = p;
+  const decided = nodules.filter((n) => n.status === 'Accepted' || n.status === 'Rejected').length;
   const approved = scan.review_status === 'Approved';
   return (
     <aside className="w-[35%] min-w-[420px] border-l border-slate-200 bg-white flex flex-col min-h-0">
@@ -42,14 +43,55 @@ export default function NodulePanel(p) {
         {approved ? (
           <div className="flex items-center gap-2 text-sm">
             <Lock className="w-4 h-4 text-emerald-700" />
-            <span>Saved · approved by <b className="font-mono">{scan.approved_by_initials}</b> · <span className="font-mono text-xs">{new Date(scan.approved_at).toLocaleString('en-GB')}</span> · <span className="font-mono">{scan.minutes_on_scan}</span> min</span>
+            <span>Saved · approved by <b className="font-mono">{scan.approved_by_initials}</b> · <span className="font-mono text-xs">{new Date(scan.approved_at).toLocaleString('en-GB')}</span> · <span className="font-mono">{scan.minutes_on_scan}</span> min{scan.central_checked_by_initials && <> · central areas checked</>}</span>
             <Link to="/results" className="ml-auto text-teal-700 hover:underline whitespace-nowrap">See in Results →</Link>
             {isReviewer && <button onClick={onReopen} className="h-8 px-3 rounded-md border border-slate-300 bg-white text-sm hover:bg-slate-100">Reopen</button>}
           </div>
         ) : isReviewer ? (
-          <button onClick={onApprove} disabled={!allDone} className="w-full h-9 rounded-md bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-40">
-            {allDone ? 'Approve scan' : 'Approve scan (accept or reject every nodule first)'}
-          </button>
+          <div className="space-y-2.5">
+            <div className="text-[11px] uppercase tracking-wider text-slate-500">Before approving</div>
+            {/* Step 1: every nodule decided */}
+            <div className="flex items-center gap-2 text-sm">
+              {allDone ? <CircleCheck className="w-5 h-5 text-emerald-600 shrink-0" /> : <Circle className="w-5 h-5 text-slate-300 shrink-0" />}
+              <span className={allDone ? 'text-slate-700' : 'text-slate-900'}>Every nodule accepted or rejected</span>
+              <span className="ml-auto font-mono text-xs text-slate-500">{decided}/{nodules.length}</span>
+            </div>
+            {/* Step 2: central areas — required, the AI's known blind spot */}
+            {central?.done ? (
+              <div className="flex items-center gap-2 text-sm">
+                <CircleCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+                <span className="text-slate-700">Central areas checked (hilum / mediastinum)</span>
+                <span className="ml-auto font-mono text-xs text-slate-500">{central.by} · {new Date(central.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
+                <button onClick={central.onUndo} className="text-xs text-slate-500 underline hover:text-slate-800">Undo</button>
+              </div>
+            ) : (
+              <div role="group" aria-label="Central areas check" className="rounded-lg border-2 border-amber-400 bg-amber-50 p-3">
+                <div className="flex items-start gap-2.5">
+                  <ScanSearch className="w-6 h-6 text-amber-700 shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <div className="font-semibold text-amber-950">Check the central areas: hilum and mediastinum</div>
+                    <p className="text-[13px] text-amber-900 mt-1 leading-snug">
+                      The AI misses tumours that touch the hilum or mediastinum, even large ones. In our test it missed 7 of 59 tumours, and all 7 were central.
+                      {nodules.length === 0 && <b> The AI found no nodules on this scan, so check carefully.</b>}
+                    </p>
+                    <p className="text-[13px] text-amber-900 mt-1">Scroll through the central chest{central?.onMediastinal ? ' in the mediastinal window' : ''}. If you find a tumour, add it with <b>Add nodule</b>.</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {central?.onMediastinal && central.win !== 'mediastinal' && (
+                    <button onClick={central.onMediastinal} className="h-9 px-3 rounded-md border border-amber-400 bg-white text-sm text-amber-950 hover:bg-amber-100">Switch to mediastinal window</button>
+                  )}
+                  <button onClick={onAdd} className="h-9 px-3 rounded-md border border-amber-400 bg-white text-sm text-amber-950 hover:bg-amber-100 flex items-center gap-1"><Plus className="w-4 h-4" />Add nodule</button>
+                  <button onClick={central?.onCheck} className="h-9 px-4 rounded-md bg-amber-500 text-amber-950 text-sm font-semibold hover:bg-amber-400 flex items-center gap-1.5 ml-auto">
+                    <Check className="w-4 h-4" />I checked the hilum and mediastinum
+                  </button>
+                </div>
+              </div>
+            )}
+            <button onClick={onApprove} disabled={!allDone || !central?.done} className="w-full h-10 rounded-md bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-40">
+              {allDone && central?.done ? 'Approve scan' : 'Approve scan (finish the steps above first)'}
+            </button>
+          </div>
         ) : <div className="text-xs text-slate-500 text-center">Read-only access</div>}
       </div>
     </aside>

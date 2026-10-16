@@ -64,3 +64,11 @@ export async function approveScan(scan, secs, me) {
   if (exported.length) await base44.entities.Nodule.bulkUpdate(exported.map((n) => ({ id: n.id, changed_after_export: true })));
   return patch;
 }
+
+// Required before approval: the reviewer checked the hilum / mediastinum (the AI's blind spot). Logged in the trail.
+export async function markCentralChecked(scan, me, done = true) {
+  const patch = done ? { central_checked_at: new Date().toISOString(), central_checked_by_initials: me.initials } : { central_checked_at: null, central_checked_by_initials: '' };
+  await base44.entities.Scan.update(scan.id, patch);
+  await logEvent(scan, null, 'central_areas_checked', done ? '' : 'yes', done ? 'yes' : 'undone', me);
+  return patch;
+}

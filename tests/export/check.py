@@ -133,6 +133,9 @@ check("Edit trail: review result per nodule (moved from Notes)", len(results_row
       "; ".join(f"{t['Timepoint'][:4]} {t['Nodule ID']}: {t['New value']}" for t in results_rows))
 check("Edit trail: Daniel's changes (old → new, who, when)", any(t["Changed by"] == "DR" and t["New value"] not in (None, "") for t in trail),
       "fields changed: " + ", ".join(sorted(f for f in fields if f)))
+central = [t for t in trail if t["Field"] == "central_areas_checked"]
+check("Edit trail: central areas (hilum / mediastinum) checked, per scan", len(central) == len(scans) and all(t["New value"] == "yes" and t["Changed by"] == "DR" for t in central),
+      "; ".join(f"{t['Timepoint']}: {t['New value']} by {t['Changed by']} at {t['Changed at']}" for t in central) or "none")
 check("Edit trail: who approved each scan", len(approved) == len(scans), "; ".join(f"{t['Timepoint']}: {t['New value']} by {t['Changed by']} at {t['Changed at']}" for t in approved))
 
 # daily "only rows not exported yet" exports: every row exactly once, changed rows again
