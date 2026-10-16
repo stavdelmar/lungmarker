@@ -1,4 +1,5 @@
-import { AlertTriangle, GitBranch, HelpCircle } from 'lucide-react';
+import { AlertTriangle, GitBranch, HelpCircle, ScanSearch, CircleCheck } from 'lucide-react';
+import { CENTRAL } from '@/lib/reviewChecks';
 import StatusBadge from '@/components/StatusBadge';
 import { fmtMaybe } from '@/components/review/viewerUtils';
 import { uncertainty, FLAG_TEXT } from '@/lib/uncertainty';
@@ -10,8 +11,8 @@ export function DoubtPills({ n, size = 'sm' }) {
   return (
     <>
       {u.lowConf && (
-        <span className={`inline-flex items-center gap-1 rounded font-semibold bg-amber-400 text-amber-950 ${cls}`}>
-          <AlertTriangle className="w-3.5 h-3.5" />AI unsure{u.pct != null && <span className="font-mono font-normal">· {u.pct}%</span>}
+        <span className={`inline-flex items-center gap-1 rounded font-semibold bg-amber-400 text-amber-950 whitespace-nowrap ${cls}`}>
+          <AlertTriangle className="w-3.5 h-3.5" />AI unsure about the edges{u.pct != null && <span className="font-mono font-normal">· {u.pct}%</span>}
         </span>
       )}
       {u.vessel && (
@@ -52,8 +53,24 @@ function Row({ n, sel, onSelect }) {
   );
 }
 
-export default function NoduleList({ nodules, selId, onSelect }) {
-  if (!nodules.length) return <div className="px-4 py-6 text-xs text-slate-400">No nodules on this scan.</div>;
+// Last item of the list: the required check of the central areas (the AI's known blind spot).
+function CentralRow({ central, sel, onSelect }) {
+  const on = sel === CENTRAL;
+  return (
+    <button onClick={() => onSelect({ id: CENTRAL })}
+      className={`w-full text-left pl-3 pr-4 py-2.5 flex items-center gap-3 border-l-4 border-t border-t-slate-200 ${central.done ? 'border-l-transparent' : 'border-l-amber-400'} ${on ? 'bg-teal-50/70' : central.done ? 'hover:bg-slate-50' : 'bg-amber-50/60 hover:bg-amber-50'}`}>
+      {central.done ? <CircleCheck className="w-4 h-4 text-emerald-600 shrink-0" /> : <ScanSearch className="w-4 h-4 text-amber-700 shrink-0" />}
+      <span className={`flex-1 text-sm ${on ? 'font-semibold text-teal-900' : 'text-slate-800'}`}>Central areas <span className="text-slate-500 font-normal">(hilum / mediastinum)</span></span>
+      {central.done
+        ? <span className="text-xs text-emerald-700">Checked · <span className="font-mono">{central.by}</span></span>
+        : <span className="text-xs font-medium text-amber-800">Not checked</span>}
+    </button>
+  );
+}
+
+export default function NoduleList({ nodules, selId, onSelect, central }) {
+  const centralRow = central && <CentralRow central={central} sel={selId} onSelect={onSelect} />;
+  if (!nodules.length) return <div><div className="px-4 py-4 text-xs text-slate-500">The AI found no nodules on this scan. Check the central areas carefully.</div>{centralRow}</div>;
   const found = nodules.filter((n) => n.kind !== 'prior_not_found');
   const gone = nodules.filter((n) => n.kind === 'prior_not_found');
   const unsure = found.filter((n) => uncertainty(n).unsure).length;
@@ -61,7 +78,7 @@ export default function NoduleList({ nodules, selId, onSelect }) {
     <div>
       {unsure > 0 && (
         <div className="px-4 py-1.5 text-xs bg-amber-100 text-amber-950 border-b border-amber-200 flex items-center gap-1.5">
-          <AlertTriangle className="w-3.5 h-3.5" /><b>{unsure}</b> of {found.length} finding{found.length === 1 ? '' : 's'} the AI is unsure about. Look at these closely.
+          <AlertTriangle className="w-3.5 h-3.5" /><b>{unsure}</b> of {found.length} finding{found.length === 1 ? '' : 's'}: the AI is unsure about the edges. Check those outlines closely.
         </div>
       )}
       <div className="divide-y divide-slate-100">{found.map((n) => <Row key={n.id} n={n} sel={selId} onSelect={onSelect} />)}</div>
@@ -71,6 +88,7 @@ export default function NoduleList({ nodules, selId, onSelect }) {
           <div className="divide-y divide-slate-100">{gone.map((n) => <Row key={n.id} n={n} sel={selId} onSelect={onSelect} />)}</div>
         </>
       )}
+      {centralRow}
     </div>
   );
 }

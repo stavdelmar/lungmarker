@@ -62,11 +62,15 @@
     "total_seconds": {
       "type": "number",
       "default": 0,
-      "description": "Wall-clock time the scan was open in Review until approval (all sessions summed; includes pauses while open). Same definition as Daniel's 'Minutes on scan'."
+      "description": "Time the scan was open in Review until approval (all sessions summed). Stops counting 5 min after the last input (mouse, keys, scroll) and resumes on the next input, so a scan left open doesn't inflate it. Same idea as Daniel's 'Minutes on scan'."
     },
     "active_minutes": {
       "type": "number",
       "description": "Active time at approval, rounded up (idle > idle_pause_seconds and hidden tab not counted)"
+    },
+    "resume_item_id": {
+      "type": "string",
+      "description": "Where 'Save & exit' left off: the selected nodule id (or 'central'); Continue reopens there."
     },
     "first_opened_at": {
       "type": "string",

@@ -11,10 +11,11 @@ import { initNodules, initNotFound } from '@/lib/initNodules';
 import { priorOf, isApproved, nextScanForPatient, nextPatient } from '@/lib/patients';
 import { fetchAll } from '@/lib/data';
 import { saveNodule, logEvent, approveScan, markCentralChecked } from '@/lib/edits';
-import { axesFromOutline, lenMm, meanOf, findingPatch, sliceStepMm, volumeAfterKeyEdit, volumeFromContours, sliceContour, allSliceContours, slicePatch, drawnSlices, interpolateSlices, handVolumeReady } from '@/lib/geometry';
+import { lenMm, meanOf, findingPatch, sliceStepMm, volumeFromContours, sliceContour, allSliceContours, slicePatch, drawnSlices, interpolateSlices, handVolumeReady } from '@/lib/geometry';
 import { brushEdit, lassoToPoly } from '@/lib/maskEdit';
 import { MIN_LONG_AXIS_MM } from '@/lib/exportRows';
 import { notFoundNote } from '@/lib/uncertainty';
+import { sortNodules, approveBlockers, nextItem, CENTRAL } from '@/lib/reviewChecks';
 import EngineOffline from '@/components/EngineOffline';
 import ReviewHeader from '@/components/review/ReviewHeader';
 import ViewerPane from '@/components/review/ViewerPane';
@@ -55,11 +56,8 @@ function ReviewScan() {
     },
   });
 
-  // Nodules in slice order (N1, N2 = order found), then the prior nodules "not found in this scan?".
-  const nodules = useMemo(() => {
-    const all = nodQ.data || [];
-    return [...all.filter((n) => n.kind !== 'prior_not_found'), ...all.filter((n) => n.kind === 'prior_not_found')];
-  }, [nodQ.data]);
+  // Nodules by Nodule ID (N1, N2, N3 …), then the prior nodules "not found in this scan?".
+  const nodules = useMemo(() => sortNodules(nodQ.data || []), [nodQ.data]);
   const meta = metaQ.data;
   const sp = meta?.pixel_spacing_mm || [1, 1];
   const nS = meta?.n_slices || meta?.slices?.length || scan?.n_slices || 1;
@@ -82,7 +80,8 @@ function ReviewScan() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const draftRef = useRef(null);
-  const sel = nodules.find((n) => n.id === selId);
+  const sel = selId === CENTRAL ? null : nodules.find((n) => n.id === selId);
+  const autoMed = useRef(false);
   const setZ = (v) => setZRaw(Math.max(0, Math.min(nS - 1, v)));
   const step = (d) => setZRaw((v) => Math.max(0, Math.min(nS - 1, v + d)));
 
@@ -114,8 +113,23 @@ function ReviewScan() {
     })();
   }, [scan, me.isReviewer, nodQ.data, findQ.data, health.isLoading, priorQ.data, waitForPrior]);
 
-  const select = (n) => { setSelId(n.id); if (n.key_slice_z != null) setZ(n.key_slice_z); setMode(null); setClicks([]); };
-  useEffect(() => { if (!selId && nodules.length) select(nodules[0]); }, [nodules.length]);
+  // Selecting the "Central areas" item switches to the mediastinal window (if the scan has it); selecting a nodule
+  // afterwards switches back to the lung window.
+  const hasMed = (meta?.windows || []).includes('mediastinal');
+  const select = (n) => {
+    setMode(null); setClicks([]);
+    if (n.id === CENTRAL) { setSelId(CENTRAL); if (hasMed && win !== 'mediastinal') { setWin('mediastinal'); autoMed.current = true; } return; }
+    if (autoMed.current) { setWin('lung'); autoMed.current = false; }
+    setSelId(n.id); if (n.key_slice_z != null) setZ(n.key_slice_z);
+  };
+  // First selection: where "Save & exit" left off, else the first item still open (Central areas if only that is left).
+  useEffect(() => {
+    if (selId || !scan || !nodQ.data || scan.review_status === 'Not started') return;
+    const resume = scan.resume_item_id;
+    if (resume && (resume === CENTRAL || nodules.some((n) => n.id === resume))) return select(resume === CENTRAL ? { id: CENTRAL } : nodules.find((n) => n.id === resume));
+    const open = nodules.find((n) => !(n.status === 'Accepted' || n.status === 'Rejected'));
+    select(open || (!scan.central_checked_at || !nodules.length ? { id: CENTRAL } : nodules[0]));
+  }, [nodules.length, scan?.review_status, !!meta]);
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['nodules', id] });
   const save = async (patch, opts) => {
@@ -168,9 +182,9 @@ function ReviewScan() {
   const onDragEnd = (h) => {
     const d = draftRef.current;
     if (h.kind === 'contour') {
-      const vol = volumeAfterKeyEdit({ oldVolume: sel.volume_mm3, oldPoly: sel.key_contour_px, newPoly: d.key_contour_px, sp, dz, contoursByZ: contoursOf(sel), keyZ: sel.key_slice_z });
+      // Same path as Erase / Draw: axes and volume follow the moved points at once, and Undo works.
       const nid = sel.id;
-      save({ key_contour_px: d.key_contour_px, volume_mm3: vol, volume_stale: false }, { source: 'points moved by hand; volume recomputed' })
+      editSlice(sel, sel.key_slice_z, d.key_contour_px, 'points moved by hand; axes and volume recomputed')
         .then(() => { if (refineOk && sel.engine_finding_id) recomputeFromPolygon(nid, d.key_contour_px); });
     } else save({ [h.kind]: d[h.kind], [h.kind === 'long_axis_px' ? 'long_axis_mm' : 'short_axis_mm']: lenMm(d[h.kind], sp) });
   };
@@ -253,11 +267,10 @@ function ReviewScan() {
     setMode(null); setClicks([]);
   });
 
+  // Next (N): the next open item in list order; after the last nodule comes "Central areas".
   const next = () => {
-    if (!nodules.length) return;
-    const idx = nodules.findIndex((n) => n.id === selId);
-    const order = [...nodules.slice(idx + 1), ...nodules.slice(0, idx + 1)];
-    select(order.find((n) => n.status === 'Pending' && n.id !== selId) || order[0]);
+    const nid = nextItem(nodules, selId, !!scan?.central_checked_at);
+    select(nid === CENTRAL ? { id: CENTRAL } : nodules.find((n) => n.id === nid));
   };
   const isNF = sel?.kind === 'prior_not_found';
   const under4 = !!sel && !isNF && !(Number(sel.long_axis_mm) >= MIN_LONG_AXIS_MM);
@@ -279,16 +292,17 @@ function ReviewScan() {
     setNotice(`Mark prior ${n.prior_label} on this scan: ${refineOk ? 'click it' : '4 clicks for its axes'}, then set its Match to prior to ${n.prior_label}. If the AI already marked it under another number, select that nodule and set Match to prior to ${n.prior_label} instead.`);
   };
   const reject = async (reason) => { await save({ status: 'Rejected', reject_reason: reason }); next(); };
-  const allDone = nodules.every((n) => n.status === 'Accepted' || n.status === 'Rejected');
 
   // Required step before approval: the AI misses central tumours (hilum / mediastinum), so Daniel confirms he checked there.
   const centralDone = !!scan?.central_checked_at;
+  const checks = approveBlockers(nodules, centralDone); // also blocks on accepted nodules without lobe / type
   const checkCentral = async (done) => {
     await markCentralChecked(scan, me, done);
-    qc.invalidateQueries({ queryKey: ['scan', id] });
+    await qc.invalidateQueries({ queryKey: ['scan', id] });
+    if (done) { const o = nodules.find((n) => !(n.status === 'Accepted' || n.status === 'Rejected')); if (o) select(o); }
   };
   const approve = async () => {
-    if (!centralDone || !allDone) return;
+    if (!checks.ok) return;
     await approveScan(scan, timer.getSecs(), me, timer.getTotal());
     qc.invalidateQueries({ queryKey: ['scan', id] }); qc.invalidateQueries({ queryKey: ['approvedScans'] }); qc.invalidateQueries({ queryKey: ['resultNodules'] });
     qc.invalidateQueries({ queryKey: ['patientScans', scan.patient_id] }); qc.invalidateQueries({ queryKey: ['scans'] });
@@ -296,6 +310,19 @@ function ReviewScan() {
   const allScansQ = useQuery({ queryKey: ['scans'], enabled: approved, queryFn: () => fetchAll(Scan, {}, 'patient_id') });
   const nextForPatient = approved && patientQ.data ? nextScanForPatient(scan, patientQ.data.map((s) => (s.id === scan.id ? scan : s))) : null;
   const nextPat = approved && !nextForPatient && allScansQ.data ? nextPatient(allScansQ.data.map((s) => (s.id === scan.id ? scan : s)), scan.patient_id) : null;
+  // Save & exit: saves the clocks (closing the page stops them), remembers the selected item, back to the worklist.
+  const saveExit = async () => {
+    timer.save();
+    await Scan.update(scan.id, { resume_item_id: selId || '' });
+    qc.invalidateQueries({ queryKey: ['scans'] });
+    nav('/');
+  };
+  const resetTimer = async () => {
+    const was = `total ${Math.ceil(timer.getTotal() / 60)} min, active ${Math.ceil(timer.getSecs() / 60)} min`;
+    await timer.reset();
+    await logEvent(scan, null, 'timer_reset', was, '0 min', me);
+    qc.invalidateQueries({ queryKey: ['scan', id] });
+  };
   const reopen = async () => {
     await Scan.update(scan.id, { review_status: 'In review' });
     await logEvent(scan, null, 'scan_approved', 'Approved', 'Reopened', me);
@@ -350,7 +377,7 @@ function ReviewScan() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-72px)]">
-      <ReviewHeader scan={scan} timer={timer} showTimer={me.isReviewer && !approved && !waitForPrior} readOnly={locked} prior={scan.timepoint !== 'Baseline' ? (priorScanNow || null) : undefined} onOpenPrior={() => priorScanNow && nav(`/review/${priorScanNow.id}`)} />
+      <ReviewHeader scan={scan} timer={timer} showTimer={me.isReviewer && !approved && !waitForPrior} onResetTimer={resetTimer} readOnly={locked} prior={scan.timepoint !== 'Baseline' ? (priorScanNow || null) : undefined} onOpenPrior={() => priorScanNow && nav(`/review/${priorScanNow.id}`)} />
       <div className="flex flex-1 min-h-0">
         <div className="w-[65%] flex flex-col min-w-0 bg-neutral-950">
           {notice && <div className="px-3 py-2 text-xs bg-rose-950/60 text-rose-100 border-b border-rose-900 flex">{notice}<button className="ml-auto underline" onClick={() => setNotice('')}>Dismiss</button></div>}
@@ -362,38 +389,36 @@ function ReviewScan() {
             <ViewerPane meta={meta} base={base} sid={sid} z={z} step={step} setZ={setZ} win={win} setWin={setWin} nodules={nodules} shapes={shapes}
               sel={sel} draft={draft} editable={!locked} mode={mode} clicks={clicks} onSelect={select} onImageClick={onImageClick}
               onDrag={onDrag} onDragEnd={onDragEnd} showRejected={showRejected} setShowRejected={setShowRejected} modeBar={modeBar} busy={busy}
-              onStrokeEnd={onStrokeEnd} brushPx={brushPx} />
+              onStrokeEnd={onStrokeEnd} brushPx={brushPx}
+              tools={{
+                on: !locked && !!sel && !isNF, sel, refineOk: refineOk && !!meta, mode,
+                onErase: () => setMode(mode === 'erase' ? null : 'erase'),
+                onDraw: () => setMode(mode === 'draw' ? null : 'draw'),
+                onUndo: undo,
+                onReset: sel?.ai_draft?.contour?.length ? () => save({ key_contour_px: sel.ai_draft.contour, contour_edits: {}, volume_mm3: sel.ai_draft.volume ?? null, volume_stale: false,
+                  ...(sel.ai_draft.long_axis_px ? { long_axis_px: sel.ai_draft.long_axis_px, short_axis_px: sel.ai_draft.short_axis_px, long_axis_mm: sel.ai_draft.long, short_axis_mm: sel.ai_draft.short } : {}) }, { source: 'reset to AI' }) : null,
+                onTrim: () => { setZ(sel.key_slice_z); setMode(mode === 'trim' ? null : 'trim'); setClicks([]); },
+                onGrow: () => { setZ(sel.key_slice_z); setMode(mode === 'grow' ? null : 'grow'); setClicks([]); },
+                onFix: () => { setZ(sel.key_slice_z); setMode('fix'); setClicks([]); },
+              }} />
           )}
         </div>
-        <NodulePanel scan={scan} nodules={nodules} sel={sel} onSelect={select} locked={locked} isReviewer={me.isReviewer} followup={followup}
+        <NodulePanel scan={scan} nodules={nodules} selId={selId} sel={sel} onSelect={select} locked={locked} isReviewer={me.isReviewer} followup={followup}
           adding={mode === 'add'} onAdd={() => { setMode(mode === 'add' ? null : 'add'); setClicks([]); }}
           canAccept={canAccept} under4={under4} onAccept={accept}
           notFound={{ onConfirm: confirmNotFound, onHere: notFoundIsHere, onReopen: (n) => saveNodule(scan, n, { status: 'Pending', reject_reason: '', match_to_prior: '' }, me).then(refresh) }}
-          next={{ scan: nextForPatient, patient: nextPat, open: (s) => nav(`/review/${s.id}`) }}
+          next={{ scan: nextForPatient, patient: nextPat, open: (s) => nav(`/review/${s.id}`), done: () => nav('/') }} checks={checks} onSaveExit={saveExit}
           waitForPrior={waitForPrior ? { prior: priorScanNow, open: () => nav(`/review/${priorScanNow.id}`), goOn: () => setForceStart(true) } : null}
-          central={{ done: centralDone, by: scan.central_checked_by_initials, at: scan.central_checked_at, onCheck: () => checkCentral(true), onUndo: () => checkCentral(false),
-            onMediastinal: (meta?.windows || []).includes('mediastinal') ? () => setWin('mediastinal') : null, win }} onRejectClick={() => setRejectOpen(true)} onNext={next} allDone={allDone} onApprove={approve} onReopen={reopen}
+          central={{ done: centralDone, by: scan.central_checked_by_initials, at: scan.central_checked_at, onCheck: () => checkCentral(true), onUndo: () => checkCentral(false), onMediastinal: hasMed ? () => setWin('mediastinal') : null }}
+          onRejectClick={() => setRejectOpen(true)} onNext={next} onApprove={approve} onReopen={reopen}
           prior={{ base, priorScan: priorQ.data?.scan, priorNodules }}
           formProps={{
             priorLabels: priorNodules.map((p) => p.nodule_label), aiSuggest, onSave: save,
-            outline: {
-              refineOk: refineOk && !!meta,
-              onConfirm: () => {
-                if (sel.source !== 'AI' && !handVolumeReady(drawnSlices(sel))) { setNotice(`To record a volume for ${sel.nodule_label}, outline it (D) on its top, middle and bottom slices; the slices in between are filled in. Without that, leave the outline unconfirmed: Volume stays empty.`); return; }
-                const vol = sel.volume_mm3 ?? volumeFromContours(allSliceContours(sel, contoursOf(sel), sp), sp, dz);
-                if (vol == null) { setNotice('Cannot confirm: no volume could be measured from this outline. Draw it (D) or reset it to the AI.'); return; }
-                save({ outline_confirmed: true, outline_confirmed_by_initials: me.initials, outline_confirmed_at: new Date().toISOString(), volume_mm3: vol, volume_stale: false });
-              },
-              onReset: () => save({ key_contour_px: sel.ai_draft.contour, contour_edits: {}, volume_mm3: sel.ai_draft.volume ?? null, volume_stale: false,
-                ...(sel.ai_draft.long_axis_px ? { long_axis_px: sel.ai_draft.long_axis_px, short_axis_px: sel.ai_draft.short_axis_px, long_axis_mm: sel.ai_draft.long, short_axis_mm: sel.ai_draft.short } : {}) }, { source: 'reset to AI' }),
-              onErase: () => setMode(mode === 'erase' ? null : 'erase'),
-              onDraw: () => setMode(mode === 'draw' ? null : 'draw'),
-              onUndo: undo,
-              onTrim: () => { setZ(sel.key_slice_z); setMode(mode === 'trim' ? null : 'trim'); setClicks([]); },
-              onGrow: () => { setZ(sel.key_slice_z); setMode(mode === 'grow' ? null : 'grow'); setClicks([]); },
-              quickMode: mode,
-              onRecalc: () => { const r = axesFromOutline(draft?.key_contour_px, sp); if (r) save(r); },
-              onFix: () => { setZ(sel.key_slice_z); setMode('fix'); setClicks([]); },
+            onConfirm: () => {
+              if (sel.source !== 'AI' && !handVolumeReady(drawnSlices(sel))) { setNotice(`To record a volume for ${sel.nodule_label}, outline it (D) on its top, middle and bottom slices; the slices in between are filled in. Without that, leave the outline unconfirmed: Volume stays empty.`); return; }
+              const vol = sel.volume_mm3 ?? volumeFromContours(allSliceContours(sel, contoursOf(sel), sp), sp, dz);
+              if (vol == null) { setNotice('Cannot confirm: no volume could be measured from this outline. Draw it (D) or reset it to the AI (⋯ on the image toolbar).'); return; }
+              save({ outline_confirmed: true, outline_confirmed_by_initials: me.initials, outline_confirmed_at: new Date().toISOString(), volume_mm3: vol, volume_stale: false });
             },
           }} />
       </div>

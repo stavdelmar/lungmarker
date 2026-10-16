@@ -4,6 +4,18 @@ import { base44 } from '@/api/base44Client';
 // never exported, or when it changed after its last export.
 export const isPendingExport = (n) => !n.exported_at || !!n.changed_after_export;
 
+// Status tag on Results: never exported / exported (date) / changed since its last export.
+export const exportStatus = (n) => (n.changed_after_export ? 'changed' : n.exported_at ? 'exported' : 'new');
+
+// Results selection: a row is pre-selected when it first appears in a state that still has to go to the sheet
+// (new, or changed since export — also when an exported row changes later); otherwise the checkboxes decide.
+// `seen` holds "id:status" keys. Returns the new selection and seen sets.
+export function preselect(rows, selected, seen) {
+  const sel = new Set(selected), saw = new Set(seen);
+  rows.forEach((n) => { const k = `${n.id}:${exportStatus(n)}`; if (!saw.has(k)) { saw.add(k); if (isPendingExport(n)) sel.add(n.id); } });
+  return { selected: sel, seen: saw };
+}
+
 // What goes into one export: the given rows (optionally only pending ones), their scans,
 // and the trail events for those rows plus scan-level events (approval) of those scans.
 export function selectForExport({ scans, nodules, events, onlyPending }) {
