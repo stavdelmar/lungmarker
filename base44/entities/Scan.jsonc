@@ -59,6 +59,19 @@
     "ai_findings_count": {
       "type": "number"
     },
+    "total_seconds": {
+      "type": "number",
+      "default": 0,
+      "description": "Wall-clock time the scan was open in Review until approval (all sessions summed; includes pauses while open). Same definition as Daniel's 'Minutes on scan'."
+    },
+    "active_minutes": {
+      "type": "number",
+      "description": "Active time at approval, rounded up (idle > idle_pause_seconds and hidden tab not counted)"
+    },
+    "first_opened_at": {
+      "type": "string",
+      "format": "date-time"
+    },
     "central_checked_at": {
       "type": "string",
       "format": "date-time",

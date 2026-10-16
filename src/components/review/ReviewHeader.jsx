@@ -15,7 +15,8 @@ export default function ReviewHeader({ scan, timer, showTimer, readOnly }) {
       {readOnly && <span className="text-xs text-slate-400">read-only</span>}
       {showTimer && (
         <span className="ml-auto text-xs text-slate-600">
-          Time on this scan: <span className="font-mono text-slate-900">{mmss(timer.secs)}</span>
+          Time on this scan: <span className="font-mono text-slate-900">{mmss(timer.total)}</span>
+          <span className="text-slate-400"> total · </span><span className="font-mono text-slate-900">{mmss(timer.secs)}</span><span className="text-slate-400"> active</span>
           {timer.paused && <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 text-[11px]">paused</span>}
         </span>
       )}

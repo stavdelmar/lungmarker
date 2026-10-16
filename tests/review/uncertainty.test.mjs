@@ -1,0 +1,22 @@
+// When the nodule list marks a finding as unsure. Run: node --import ./tests/export/register.mjs tests/review/uncertainty.test.mjs
+import { uncertainty } from '@/lib/uncertainty';
+let fails = 0;
+const check = (name, ok, ev) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name.padEnd(52)} │ ${ev}`); if (!ok) fails++; };
+const ai = (o) => ({ source: 'AI', flags: [], ai_confidence: 1, ...o });
+const show = (u) => JSON.stringify(u);
+let u = uncertainty(ai({}));
+check('Confident AI finding: no doubt shown', !u.unsure, show(u));
+u = uncertainty(ai({ flags: ['low_confidence'], ai_confidence: 0.42 }));
+check('Engine flag low_confidence → "AI unsure · 42%"', u.lowConf && u.pct === 42, show(u));
+u = uncertainty(ai({ ai_confidence: 0.3 }));
+check('Confidence < 50% without the flag → unsure too', u.lowConf, show(u));
+u = uncertainty(ai({ flags: ['possible_vessel'] }));
+check('possible_vessel → "Possibly a vessel"', u.vessel && !u.lowConf, show(u));
+u = uncertainty(ai({ flags: ['touches_pleura'] }));
+check('touches_pleura is information, not doubt', !u.unsure, show(u));
+u = uncertainty({ source: 'Added by reviewer', flags: [], ai_confidence: null });
+check('Nodule Daniel added himself: no AI doubt', !u.unsure, show(u));
+u = uncertainty({ kind: 'prior_not_found', source: 'AI: not found in this scan', flags: [] });
+check('Prior "not found?" item: shown separately, not as doubt', !u.unsure, show(u));
+console.log(fails ? `\n${fails} failed` : '\nall pass');
+process.exit(fails ? 1 : 0);

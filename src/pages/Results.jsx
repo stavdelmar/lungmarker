@@ -7,7 +7,7 @@ import { useSettings } from '@/hooks/useAppData';
 import { useMe } from '@/hooks/useMe';
 import { fetchAll, fmt1, fmtDateTime } from '@/lib/data';
 import { buildWorkbook } from '@/lib/exportWorkbook';
-import { MIN_LONG_AXIS_MM } from '@/lib/exportRows';
+import { exportable } from '@/lib/exportRows';
 import { isPendingExport, selectForExport, markExported, sortKey } from '@/lib/exportSelect';
 import SummaryCards from '@/components/results/SummaryCards';
 import ChangeSummary from '@/components/results/ChangeSummary';
@@ -34,7 +34,7 @@ export default function Results() {
   const sMap = Object.fromEntries(scans.map((s) => [s.id, s]));
   const patients = [...new Set(scans.map((s) => s.patient_id))].sort();
   // Same rows and order as the Excel file (accepted, ≥ 4 mm, grouped by scan, N1, N2…).
-  const nodules = (nodQ.data || []).filter((n) => sMap[n.scan] && Number(n.long_axis_mm) >= MIN_LONG_AXIS_MM)
+  const nodules = (nodQ.data || []).filter((n) => sMap[n.scan] && exportable(n))
     .sort((a, b) => sortKey(sMap[a.scan], a).localeCompare(sortKey(sMap[b.scan], b)));
   // Only reviewers mark rows as exported; a viewer's export is a plain copy of what is shown.
   const useOnlyNew = me.isReviewer && onlyNew;
@@ -77,24 +77,25 @@ export default function Results() {
         </div>
       </div>
       {exportMsg && <p className="text-xs text-slate-500 -mt-3 text-right">{exportMsg}</p>}
-      <SummaryCards scanIds={scans.map((s) => s.id)} settings={settings} />
+      <SummaryCards scanIds={scans.map((s) => s.id)} scans={scans} settings={settings} />
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
-            <tr>{['Patient', 'Timepoint', 'Nodule', 'Lobe', 'Long × short', 'Mean', 'Volume', 'Match to prior', 'Edited', 'Approved by', 'Approved at', 'Exported'].map((h) => <th key={h} className="text-left font-medium px-3 py-2.5">{h}</th>)}</tr>
+            <tr>{['Patient', 'Timepoint', 'Nodule', 'Lobe', 'Long × short', 'Mean', 'Volume', 'Match to prior', 'Edited', 'Minutes (total · active)', 'Approved by', 'Approved at', 'Exported'].map((h) => <th key={h} className="text-left font-medium px-3 py-2.5">{h}</th>)}</tr>
           </thead>
           <tbody>
             {nodules.map((n) => { const s = sMap[n.scan]; return (
               <tr key={n.id} onClick={() => setDetail(n)} className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer">
-                <td className="px-3 py-2 font-mono">{s?.patient_id}</td><td className="px-3">{s?.timepoint}</td><td className="px-3 font-mono">{n.nodule_label}</td><td className="px-3">{n.lobe}</td>
+                <td className="px-3 py-2 font-mono">{s?.patient_id}</td><td className="px-3">{s?.timepoint}</td><td className="px-3 font-mono">{n.nodule_label || <span className="text-slate-500">prior {n.prior_label}</span>}</td><td className="px-3">{n.lobe}</td>
                 <td className="px-3 font-mono">{fmt1(n.long_axis_mm)} × {fmt1(n.short_axis_mm)}</td><td className="px-3 font-mono">{fmt1(n.mean_diameter_mm)}</td>
                 <td className="px-3 font-mono">{n.outline_confirmed && n.volume_mm3 != null ? Math.round(n.volume_mm3) : '—'}</td>
                 <td className="px-3 font-mono">{s?.timepoint === 'Baseline' ? '' : n.match_to_prior || '—'}</td>
                 <td className="px-3">{n.was_edited ? <span className="text-violet-700">yes</span> : 'no'}</td>
+                <td className="px-3 font-mono whitespace-nowrap">{s?.minutes_on_scan ?? '—'}<span className="text-slate-400"> · {s?.active_minutes ?? '—'}</span></td>
                 <td className="px-3 font-mono">{s?.approved_by_initials}</td><td className="px-3 font-mono text-xs">{fmtDateTime(s?.approved_at)}</td>
                 <td className="px-3 text-xs whitespace-nowrap">{n.changed_after_export ? <span className="text-amber-700">changed since {fmtDay(n.exported_at)}</span> : n.exported_at ? <span className="text-slate-500">exported {fmtDay(n.exported_at)}</span> : <span className="text-teal-700">new</span>}</td>
               </tr>); })}
-            {nodQ.data && !nodules.length && <tr><td colSpan={12} className="py-10 text-center text-slate-400 text-sm">No accepted nodules on approved scans yet.</td></tr>}
+            {nodQ.data && !nodules.length && <tr><td colSpan={13} className="py-10 text-center text-slate-400 text-sm">No accepted nodules on approved scans yet.</td></tr>}
           </tbody>
         </table>
       </div>

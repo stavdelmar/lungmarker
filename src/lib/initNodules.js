@@ -19,9 +19,32 @@ export async function initNodules(scan, findings, priorNodules) {
       flags: f.flags || [], ai_confidence: f.confidence,
       ai_draft: {
         lobe: f.lobe, type, long, short, solid, volume: vol, key_slice_number: f.key_slice_number, key_slice_z: f.key_slice_z, contour,
-        long_axis_px: f.long_axis_px, short_axis_px: f.short_axis_px, match: f.match || null, match_label: matchLabel,
+        long_axis_px: f.long_axis_px, short_axis_px: f.short_axis_px, match: f.match || null, match_label: matchLabel, confidence: f.confidence ?? null, flags: f.flags || [],
       },
     };
   });
   if (recs.length) await base44.entities.Nodule.bulkCreate(recs);
+}
+// Follow-ups: every prior nodule that is not found in this scan becomes a "Not found in this scan?" item for
+// Daniel to confirm. Source 1 = the engine's match_summary.not_found_in_current (prior finding IDs).
+// Source 2 = prior nodules Daniel added by hand (the engine never saw them, so it can't match them).
+// Rejected prior nodules are skipped. Items are Pending until Daniel decides.
+export function notFoundItems(scan, matchSummary, priorNodules) {
+  const gone = new Set(matchSummary?.not_found_in_current || []);
+  const prior = priorNodules.filter((p) => p.status !== 'Rejected' && (p.kind || 'nodule') === 'nodule');
+  const items = prior.filter((p) => (p.engine_finding_id && gone.has(p.engine_finding_id)) || (!p.engine_finding_id && p.source !== 'AI'));
+  return items.sort((a, b) => String(a.nodule_label).localeCompare(String(b.nodule_label), undefined, { numeric: true })).map((p) => ({
+    scan: scan.id, engine_scan_id: scan.engine_scan_id, kind: 'prior_not_found', nodule_label: '', prior_label: p.nodule_label,
+    source: p.source === 'AI' ? 'AI: not found in this scan' : 'Prior nodule added by hand (not matched by the AI)',
+    engine_finding_id: '', status: 'Pending', was_edited: false, lobe: p.lobe || '', type: p.type || '', slice_number: null, key_slice_z: null,
+    long_axis_mm: null, short_axis_mm: null, mean_diameter_mm: null, volume_mm3: null, outline_confirmed: false,
+    match_to_prior: '', notes: '', key_contour_px: [], contour_edits: {}, flags: [],
+    ai_draft: { not_found: true, prior_label: p.nodule_label, prior_lobe: p.lobe || '', prior_long: p.long_axis_mm ?? null, prior_short: p.short_axis_mm ?? null, from_engine: !!p.engine_finding_id },
+  }));
+}
+
+export async function initNotFound(scan, matchSummary, priorNodules) {
+  const recs = notFoundItems(scan, matchSummary, priorNodules);
+  if (recs.length) await base44.entities.Nodule.bulkCreate(recs);
+  return recs.length;
 }

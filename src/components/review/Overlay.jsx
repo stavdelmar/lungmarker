@@ -1,3 +1,5 @@
+import { uncertainty } from '@/lib/uncertainty';
+
 const pts = (p) => p.map((q) => q.join(',')).join(' ');
 const AXES = ['long_axis_px', 'short_axis_px'];
 
@@ -19,7 +21,7 @@ export default function Overlay({ shapes, selId, draft, isKey, editable, scale, 
         const p = polys.find((q) => q.length > 2) || (n.id === selId && isKey ? draft?.long_axis_px : null);
         if (!p) return null;
         const x = Math.max(...p.map((q) => q[0])), y = Math.min(...p.map((q) => q[1]));
-        return <text key={'t' + n.id} x={x + 5 / scale} y={y} fontSize={fs} fontFamily="JetBrains Mono, monospace" fill={n.id === selId ? '#5eead4' : '#fbbf24'} style={{ pointerEvents: 'none' }}>{n.nodule_label}</text>;
+        return <text key={'t' + n.id} x={x + 5 / scale} y={y} fontSize={fs} fontFamily="JetBrains Mono, monospace" fill={n.id === selId ? '#5eead4' : '#fbbf24'} style={{ pointerEvents: 'none' }}>{n.nodule_label}{uncertainty(n).unsure ? ' ?' : ''}</text>;
       })}
       {isKey && draft?.long_axis_px?.length === 2 && <line x1={draft.long_axis_px[0][0]} y1={draft.long_axis_px[0][1]} x2={draft.long_axis_px[1][0]} y2={draft.long_axis_px[1][1]} stroke="#f0abfc" strokeWidth={1.5} vectorEffect="non-scaling-stroke" style={{ pointerEvents: 'none' }} />}
       {isKey && draft?.short_axis_px?.length === 2 && <line x1={draft.short_axis_px[0][0]} y1={draft.short_axis_px[0][1]} x2={draft.short_axis_px[1][0]} y2={draft.short_axis_px[1][1]} stroke="#f0abfc" strokeWidth={1.5} strokeDasharray="5 4" vectorEffect="non-scaling-stroke" style={{ pointerEvents: 'none' }} />}

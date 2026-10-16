@@ -70,6 +70,16 @@
     "volume_mm3": {
       "type": "number"
     },
+    "kind": {
+      "type": "string",
+      "enum": ["nodule", "prior_not_found"],
+      "default": "nodule",
+      "description": "prior_not_found = a nodule from the prior scan that was not found on this follow-up; Daniel confirms it or says it is there"
+    },
+    "prior_label": {
+      "type": "string",
+      "description": "For prior_not_found: the prior scan's Nodule ID (e.g. N2)"
+    },
     "contour_edits": {
       "type": "object",
       "description": "Outlines Daniel changed on slices other than the key slice: {\"<z>\": [[x,y],...]}; [] = erased on that slice"

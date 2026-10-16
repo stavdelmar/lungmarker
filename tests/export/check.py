@@ -18,6 +18,8 @@ COLS = ["Patient ID", "Scan date", "Timepoint", "Series #", "Slice thickness (mm
         "Minutes on scan", "Measured by", "Notes"]
 header = [c.value for c in ws[1]]
 rows = [dict(zip(header, [c.value for c in r])) for r in ws.iter_rows(min_row=2)]
+nf_rows = [r for r in rows if r["Match to prior"] == "Not found"]
+rows = [r for r in rows if r["Match to prior"] != "Not found"]
 cells = {(c.row, c.column_letter): c for r in ws.iter_rows(min_row=2, max_col=18) for c in r}
 nod = {(n["engine_scan_id"], n["nodule_label"]): n for n in state["nodules"]}
 sid = {("Baseline"): "RIDER-TEST_test", ("Follow-up 1"): "RIDER-TEST_retest"}
@@ -95,9 +97,10 @@ scans = {s["engine_scan_id"]: s for s in state["scans"]}
 bad, ev = [], []
 for r in rows:
     s = scans[sid[r["Timepoint"]]]
-    exp = -(-s["active_seconds"] // 60)
-    (bad if r["Minutes on scan"] != exp else ev).append(f"{r['Timepoint']}: timer {s['active_seconds']} s → {r['Minutes on scan']} min")
-check("Minutes on scan = built-in timer (active seconds, rounded up)", not bad, "; ".join(dict.fromkeys(bad or ev)))
+    exp = -(-s["total_seconds"] // 60)
+    (bad if r["Minutes on scan"] != exp or s.get("active_minutes") != -(-s["active_seconds"] // 60) else ev).append(
+        f"{r['Timepoint']}: open → approved {s['total_seconds']} s → {r['Minutes on scan']} min exported (active {s['active_minutes']} min kept for Results)")
+check("Minutes on scan = total time open → approved (Daniel's definition); active kept too", not bad, "; ".join(dict.fromkeys(bad or ev)))
 
 # 9 blanks: read the raw sheet XML (openpyxl turns an empty-text cell into None and would hide it)
 import zipfile
@@ -129,8 +132,11 @@ covered = all(any(t["Nodule ID"] == r["Nodule ID"] and t["Timepoint"] == r["Time
 check("Edit trail: AI draft for every exported nodule", covered,
       f"{len(draft_rows)} 'AI draft' rows; AI value column filled on changed fields: {ai_shown}; nodules accepted unchanged: {len(unchanged)}")
 results_rows = [t for t in trail if t["Field"] == "Review result"]
-check("Edit trail: review result per nodule (moved from Notes)", len(results_rows) == len(rows),
+check("Edit trail: review result per exported row (moved from Notes)", len(results_rows) == len(rows) + len(nf_rows),
       "; ".join(f"{t['Timepoint'][:4]} {t['Nodule ID']}: {t['New value']}" for t in results_rows))
+check("Edit trail: 'not found' recorded as AI draft + review result", any(t["Field"] == "Review result" and "confirmed not found" in str(t["New value"]) for t in trail)
+      and any(t["Field"] == "AI draft" and "not found in this scan" in str(t["AI value"]) for t in trail),
+      "; ".join(f"{t['Nodule ID']}: {t['Field']} → {t['AI value'] or t['New value']}" for t in trail if "prior" in str(t["Nodule ID"]) and t["Field"] in ("AI draft", "Review result")))
 check("Edit trail: Daniel's changes (old → new, who, when)", any(t["Changed by"] == "DR" and t["New value"] not in (None, "") for t in trail),
       "fields changed: " + ", ".join(sorted(f for f in fields if f)))
 central = [t for t in trail if t["Field"] == "central_areas_checked"]
@@ -138,10 +144,21 @@ check("Edit trail: central areas (hilum / mediastinum) checked, per scan", len(c
       "; ".join(f"{t['Timepoint']}: {t['New value']} by {t['Changed by']} at {t['Changed at']}" for t in central) or "none")
 check("Edit trail: who approved each scan", len(approved) == len(scans), "; ".join(f"{t['Timepoint']}: {t['New value']} by {t['Changed by']} at {t['Changed at']}" for t in approved))
 
+# prior nodules not found on the follow-up
+nfa = state["notFoundAfterInit"]
+check("Not-found items created from the engine list (+ hand-added prior), Pending for Daniel", sorted(x["prior"] for x in nfa) == ["N2", "N4"] and all(x["status"] == "Pending" and not x["match_to_prior"] for x in nfa),
+      "; ".join(f"prior {x['prior']}: {x['status']}, {'engine not_found_in_current' if x['from_engine'] else 'added by hand on prior'}" for x in nfa) + " · prior N3 (rejected) not asked")
+ok = len(nf_rows) == 1 and nf_rows[0]["Nodule ID"] is None and nf_rows[0]["Lobe"] == "LLL" and nf_rows[0]["Timepoint"] == "Follow-up 1" \
+    and all(nf_rows[0][c] is None for c in ["Slice #", "Type", "Long axis (mm)", "Short axis (mm)", "Mean diameter (mm)", "Solid component (mm)", "Volume (mm3)"]) \
+    and nf_rows[0]["Notes"] == "Not seen on this scan, likely resolved" and nf_rows[0]["Measured by"] == "DR"
+check("Confirmed 'not found' → one row: Match to prior = Not found + Daniel's note, no sizes", ok,
+      " | ".join(f"{k}={show(v)}" for k, v in (nf_rows[0].items() if nf_rows else [])) if nf_rows else "no row")
+check("Prior nodule marked 'it's here' is not exported as Not found", len(nf_rows) == 1, f"{len(nf_rows)} Not found row(s); prior N4 was marked present")
+
 # daily "only rows not exported yet" exports: every row exactly once, changed rows again
 daily = state["daily"]
 seen = [r for d in daily[:2] for r in d["rows"]]
-ok = (sorted(seen) == sorted(set(seen)) and len(seen) == 4 and daily[2]["rows"] == ["Baseline N1"] and daily[3]["rows"] == [])
+ok = (sorted(seen) == sorted(set(seen)) and len(seen) == 5 and daily[2]["rows"] == ["Baseline N1"] and daily[3]["rows"] == [])
 check("Daily export: no duplicates, changed row re-exported, nothing twice", ok,
       " · ".join(f"{d['day']}: {', '.join(d['rows']) or '(nothing new)'}" for d in daily))
 check("Re-exported row is flagged as UPDATED in the Read me sheet", any("UPDATED" in l for l in daily[2]["readme"]) and not any("UPDATED" in l for l in daily[1]["readme"]),

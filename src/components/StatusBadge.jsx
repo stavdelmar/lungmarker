@@ -6,6 +6,7 @@ const STYLES = {
   Accepted: 'bg-emerald-50 text-emerald-700',
   Rejected: 'bg-rose-50 text-rose-700',
   Edited: 'bg-violet-50 text-violet-700',
+  'Not found': 'bg-slate-200 text-slate-700',
 };
 
 export default function StatusBadge({ status }) {

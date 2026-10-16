@@ -7,11 +7,12 @@ import { engine } from '@/api/engine';
 import { useMe } from '@/hooks/useMe';
 import { useSettings, useHealth } from '@/hooks/useAppData';
 import { useScanTimer } from '@/hooks/useScanTimer';
-import { initNodules } from '@/lib/initNodules';
+import { initNodules, initNotFound } from '@/lib/initNodules';
 import { saveNodule, logEvent, approveScan, markCentralChecked } from '@/lib/edits';
 import { axesFromOutline, lenMm, meanOf, findingPatch, sliceStepMm, volumeAfterKeyEdit, volumeFromContours, sliceContour, allSliceContours, slicePatch, drawnSlices, interpolateSlices, handVolumeReady } from '@/lib/geometry';
 import { brushEdit, lassoToPoly } from '@/lib/maskEdit';
 import { MIN_LONG_AXIS_MM } from '@/lib/exportRows';
+import { notFoundNote } from '@/lib/uncertainty';
 import EngineOffline from '@/components/EngineOffline';
 import ReviewHeader from '@/components/review/ReviewHeader';
 import ViewerPane from '@/components/review/ViewerPane';
@@ -42,7 +43,11 @@ export default function Review() {
     },
   });
 
-  const nodules = nodQ.data || [];
+  // Nodules in slice order (N1, N2 = order found), then the prior nodules "not found in this scan?".
+  const nodules = useMemo(() => {
+    const all = nodQ.data || [];
+    return [...all.filter((n) => n.kind !== 'prior_not_found'), ...all.filter((n) => n.kind === 'prior_not_found')];
+  }, [nodQ.data]);
   const meta = metaQ.data;
   const sp = meta?.pixel_spacing_mm || [1, 1];
   const nS = meta?.n_slices || meta?.slices?.length || scan?.n_slices || 1;
@@ -74,7 +79,7 @@ export default function Review() {
     draftRef.current = d; setDraft(d);
   }, [sel?.id, sel?.updated_date]);
 
-  const timer = useScanTimer({ scanId: scan?.id, initial: scan?.active_seconds, enabled: !!scan && me.isReviewer && !approved, idleSeconds: settings?.idle_pause_seconds || 120 });
+  const timer = useScanTimer({ scanId: scan?.id, initial: scan?.active_seconds, initialTotal: scan?.total_seconds, enabled: !!scan && me.isReviewer && !approved, idleSeconds: settings?.idle_pause_seconds || 120 });
 
   const initRef = useRef(false);
   useEffect(() => {
@@ -82,17 +87,33 @@ export default function Review() {
     initRef.current = true;
     (async () => {
       const findings = findQ.data.findings || [];
-      if (nodQ.data.length === 0) await initNodules(scan, findings, priorQ.data?.nodules || []);
-      await Scan.update(scan.id, { review_status: 'In review', ai_findings_count: findings.length, engine_version: health.data?.engine_version || scan.engine_version || '' });
+      if (nodQ.data.length === 0) {
+        await initNodules(scan, findings, priorQ.data?.nodules || []);
+        if (scan.timepoint !== 'Baseline') await initNotFound(scan, findQ.data.match_summary, priorQ.data?.nodules || []);
+      }
+      await Scan.update(scan.id, { review_status: 'In review', first_opened_at: scan.first_opened_at || new Date().toISOString(), ai_findings_count: findings.length, engine_version: health.data?.engine_version || scan.engine_version || '' });
       qc.invalidateQueries({ queryKey: ['nodules', id] }); qc.invalidateQueries({ queryKey: ['scan', id] });
     })();
   }, [scan, me.isReviewer, nodQ.data, findQ.data, health.isLoading, priorQ.data]);
 
-  const select = (n) => { setSelId(n.id); setZ(n.key_slice_z ?? 0); setMode(null); setClicks([]); };
+  const select = (n) => { setSelId(n.id); if (n.key_slice_z != null) setZ(n.key_slice_z); setMode(null); setClicks([]); };
   useEffect(() => { if (!selId && nodules.length) select(nodules[0]); }, [nodules.length]);
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['nodules', id] });
-  const save = async (patch, opts) => { if (!sel) return; await saveNodule(scan, sel, patch, me, opts); await refresh(); };
+  const save = async (patch, opts) => {
+    if (!sel) return;
+    await saveNodule(scan, sel, patch, me, opts);
+    if ('match_to_prior' in patch && sel.kind !== 'prior_not_found') await syncNotFound(sel, patch.match_to_prior);
+    await refresh();
+  };
+  // A "prior Nx not found?" item resolves itself when Daniel matches a nodule in this scan to Nx (and reopens if he undoes it).
+  const syncNotFound = async (n, label) => {
+    const items = (nodQ.data || []).filter((x) => x.kind === 'prior_not_found');
+    const hit = items.find((x) => x.prior_label === label && x.status === 'Pending');
+    if (hit) await saveNodule(scan, hit, { status: 'Rejected', reject_reason: `Matched to ${n.nodule_label}` }, me);
+    const old = items.find((x) => x.prior_label === n.match_to_prior && x.prior_label !== label && x.reject_reason === `Matched to ${n.nodule_label}`);
+    if (old) await saveNodule(scan, old, { status: 'Pending', reject_reason: '' }, me);
+  };
   const runEngine = async (fn) => {
     setBusy(true); setNotice('');
     try { await fn(); } catch (e) { setNotice(`AI engine is offline — ${e.message}`); }
@@ -100,7 +121,7 @@ export default function Review() {
   };
 
   const findingsById = useMemo(() => Object.fromEntries((findQ.data?.findings || []).map((f) => [f.finding_id, f])), [findQ.data]);
-  const shapes = useMemo(() => nodules.filter((n) => showRejected || n.status !== 'Rejected').map((n) => {
+  const shapes = useMemo(() => nodules.filter((n) => n.kind !== 'prior_not_found' && (showRejected || n.status !== 'Rejected')).map((n) => {
     let polys = [];
     if (z === n.key_slice_z) polys = [(n.id === selId ? draft?.key_contour_px : n.key_contour_px) || []];
     else if (n.source !== 'AI') {
@@ -220,9 +241,25 @@ export default function Review() {
     const order = [...nodules.slice(idx + 1), ...nodules.slice(0, idx + 1)];
     select(order.find((n) => n.status === 'Pending' && n.id !== selId) || order[0]);
   };
-  const under4 = !!sel && !(Number(sel.long_axis_mm) >= MIN_LONG_AXIS_MM);
-  const canAccept = !locked && !!sel && !under4 && (!followup || !!sel.match_to_prior);
-  const accept = async () => { if (!canAccept) return; await save({ status: 'Accepted', reject_reason: '' }); next(); };
+  const isNF = sel?.kind === 'prior_not_found';
+  const under4 = !!sel && !isNF && !(Number(sel.long_axis_mm) >= MIN_LONG_AXIS_MM);
+  const canAccept = !locked && !!sel && !under4 && (isNF || !followup || !!sel.match_to_prior);
+  const accept = async () => {
+    if (!canAccept) return;
+    if (isNF) return confirmNotFound(sel, sel.notes || notFoundNote(sel));
+    await save({ status: 'Accepted', reject_reason: '' }); next();
+  };
+  // Prior nodule not found: Daniel confirms it (exported as Match to prior = "Not found" + his note), or says it is here.
+  const confirmNotFound = async (n, note) => {
+    await saveNodule(scan, n, { status: 'Accepted', reject_reason: '', match_to_prior: 'Not found', notes: note ?? n.notes ?? '' }, me);
+    await refresh(); next();
+  };
+  const notFoundIsHere = async (n) => {
+    await saveNodule(scan, n, { status: 'Rejected', reject_reason: 'Seen in this scan', match_to_prior: '' }, me);
+    await refresh();
+    setMode('add'); setClicks([]);
+    setNotice(`Mark prior ${n.prior_label} on this scan: ${refineOk ? 'click it' : '4 clicks for its axes'}, then set its Match to prior to ${n.prior_label}. If the AI already marked it under another number, select that nodule and set Match to prior to ${n.prior_label} instead.`);
+  };
   const reject = async (reason) => { await save({ status: 'Rejected', reject_reason: reason }); next(); };
   const allDone = nodules.every((n) => n.status === 'Accepted' || n.status === 'Rejected');
 
@@ -234,7 +271,7 @@ export default function Review() {
   };
   const approve = async () => {
     if (!centralDone || !allDone) return;
-    await approveScan(scan, timer.getSecs(), me);
+    await approveScan(scan, timer.getSecs(), me, timer.getTotal());
     qc.invalidateQueries({ queryKey: ['scan', id] }); qc.invalidateQueries({ queryKey: ['approvedScans'] }); qc.invalidateQueries({ queryKey: ['resultNodules'] });
   };
   const reopen = async () => {
@@ -309,6 +346,7 @@ export default function Review() {
         <NodulePanel scan={scan} nodules={nodules} sel={sel} onSelect={select} locked={locked} isReviewer={me.isReviewer} followup={followup}
           adding={mode === 'add'} onAdd={() => { setMode(mode === 'add' ? null : 'add'); setClicks([]); }}
           canAccept={canAccept} under4={under4} onAccept={accept}
+          notFound={{ onConfirm: confirmNotFound, onHere: notFoundIsHere, onReopen: (n) => saveNodule(scan, n, { status: 'Pending', reject_reason: '', match_to_prior: '' }, me).then(refresh) }}
           central={{ done: centralDone, by: scan.central_checked_by_initials, at: scan.central_checked_at, onCheck: () => checkCentral(true), onUndo: () => checkCentral(false),
             onMediastinal: (meta?.windows || []).includes('mediastinal') ? () => setWin('mediastinal') : null, win }} onRejectClick={() => setRejectOpen(true)} onNext={next} allDone={allDone} onApprove={approve} onReopen={reopen}
           prior={{ base, priorScan: priorQ.data?.scan, priorNodules }}

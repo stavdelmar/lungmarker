@@ -59,7 +59,7 @@ export default function ViewerPane(p) {
           )}
         </Viewer>
         <SliceSlider z={z} n={n} onChange={setZ}
-          ticks={nodules.filter((x) => showRejected || x.status !== 'Rejected').map((x) => ({ id: x.id, z: x.key_slice_z, label: x.nodule_label, sel: x.id === sel?.id }))} />
+          ticks={nodules.filter((x) => x.key_slice_z != null && (showRejected || x.status !== 'Rejected')).map((x) => ({ id: x.id, z: x.key_slice_z, label: x.nodule_label, sel: x.id === sel?.id }))} />
       </div>
     </div>
   );

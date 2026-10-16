@@ -9,6 +9,18 @@ import { meanOf } from '@/lib/geometry';
 export default function ResultDetail({ n, scan, base, onClose }) {
   const evQ = useQuery({ queryKey: ['events', n?.id], enabled: !!n, queryFn: async () => (await base44.entities.EditEvent.filter({ nodule: n.id }, { sort: 'edited_at', limit: 300 })).items });
   if (!n) return null;
+  if (n.kind === 'prior_not_found') {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/30 grid place-items-center" onClick={onClose}>
+        <div className="bg-white rounded-lg p-5 max-w-md text-sm space-y-2" onClick={(e) => e.stopPropagation()}>
+          <div className="font-semibold">Prior {n.prior_label} not found · {scan?.patient_id} {scan?.timepoint}</div>
+          <p className="text-slate-600">Confirmed by <b className="font-mono">{scan?.approved_by_initials}</b>: the nodule {n.prior_label}{n.lobe ? ` (${n.lobe})` : ''} from the prior scan was not found on this scan.</p>
+          {n.notes && <p className="text-slate-800">Note: {n.notes}</p>}
+          <button onClick={onClose} className="h-8 px-3 rounded-md border border-slate-300 text-sm">Close</button>
+        </div>
+      </div>
+    );
+  }
   const ai = n.ai_draft || {};
   const finalC = n.key_contour_px || [], aiC = ai.contour || [];
   const shapes = [

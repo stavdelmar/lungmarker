@@ -15,7 +15,7 @@ export function fmtVal(key, v) {
 
 function eventBase(scan, nodule, me) {
   return {
-    scan: scan.id, nodule: nodule?.id || '', engine_scan_id: scan.engine_scan_id, nodule_label: nodule?.nodule_label || '',
+    scan: scan.id, nodule: nodule?.id || '', engine_scan_id: scan.engine_scan_id, nodule_label: nodule?.nodule_label || (nodule?.prior_label ? `prior ${nodule.prior_label}` : ''),
     edited_by_email: me.user.email, edited_by_initials: me.initials, edited_at: new Date().toISOString(),
   };
 }
@@ -54,10 +54,14 @@ export async function saveNodule(scan, nodule, patch, me, { source } = {}) {
   await base44.entities.EditEvent.bulkCreate(events);
 }
 // Approve a scan: stamps who/when and the timer's minutes, and logs it in the edit trail.
-export async function approveScan(scan, secs, me) {
-  const patch = { review_status: 'Approved', approved_by_email: me.user.email, approved_by_initials: me.initials, approved_at: new Date().toISOString(), active_seconds: secs, minutes_on_scan: Math.ceil(secs / 60) };
+// Minutes on scan (exported) = total time open in Review until approval, like Daniel's own log
+// (whole process). Active minutes are kept alongside for the fair-comparison view in Results.
+export async function approveScan(scan, secs, me, totalSecs) {
+  const total = Math.max(totalSecs ?? 0, secs);
+  const patch = { review_status: 'Approved', approved_by_email: me.user.email, approved_by_initials: me.initials, approved_at: new Date().toISOString(),
+    active_seconds: secs, total_seconds: total, active_minutes: Math.ceil(secs / 60), minutes_on_scan: Math.ceil(total / 60) };
   await base44.entities.Scan.update(scan.id, patch);
-  await logEvent(scan, null, 'scan_approved', 'In review', 'Approved', me);
+  await logEvent(scan, null, 'scan_approved', 'In review', `Approved · total ${patch.minutes_on_scan} min, active ${patch.active_minutes} min`, me);
   // Re-approval after a reopen can change Minutes on scan → already-exported rows of this scan go out again.
   const exported = scan.minutes_on_scan != null && scan.minutes_on_scan !== patch.minutes_on_scan
     ? (await base44.entities.Nodule.filter({ scan: scan.id, status: 'Accepted' }, { limit: 500 })).items.filter((n) => n.exported_at) : [];

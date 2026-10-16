@@ -2,14 +2,14 @@ import CropView from '@/components/CropView';
 import { engine } from '@/api/engine';
 import { fmtMaybe } from '@/components/review/viewerUtils';
 
-export default function PriorBox({ base, priorScan, priorNodules, chosen, suggested }) {
+export default function PriorBox({ base, priorScan, priorNodules, chosen, suggested, caption }) {
   const label = chosen && chosen !== 'N/A' ? chosen : suggested;
   const pn = priorNodules.find((x) => x.nodule_label === label);
   return (
     <div className="rounded-md border border-slate-200 overflow-hidden">
       <div className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-slate-500 bg-slate-50 flex justify-between">
         <span>Prior scan {priorScan ? `· ${priorScan.timepoint} · ${priorScan.scan_date?.slice(0, 10)}` : ''}</span>
-        {pn && <span className="normal-case tracking-normal">{chosen === label ? 'recorded match' : 'AI suggestion'}</span>}
+        {pn && <span className="normal-case tracking-normal">{caption || (chosen === label ? 'recorded match' : 'AI suggestion')}</span>}
       </div>
       {!priorScan && <div className="p-3 text-xs text-slate-400">Prior scan not synced yet.</div>}
       {priorScan && !pn && <div className="p-3 text-xs text-slate-400">{chosen === 'N/A' ? 'Recorded as a new nodule.' : 'No matched prior nodule.'}</div>}

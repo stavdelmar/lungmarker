@@ -3,7 +3,7 @@
 // The AI findings are synthetic but in the engine API contract v1 shape. Run: node tests/export/run.mjs
 import * as XLSX from 'xlsx';
 import { base44 } from '@/api/base44Client';
-import { initNodules } from '@/lib/initNodules';
+import { initNodules, initNotFound } from '@/lib/initNodules';
 import { saveNodule, approveScan, markCentralChecked } from '@/lib/edits';
 import { buildWorkbook } from '@/lib/exportWorkbook';
 import { selectForExport, markExported } from '@/lib/exportSelect';
@@ -58,7 +58,7 @@ export async function runScenario() {
   await addByHand(base, 60, 61, [[380, 100], [385, 100]], [[382.5, 98], [382.5, 102]]);
   await save(base, 'N4', { status: 'Accepted' });
   await markCentralChecked(base, me); // required step: hilum / mediastinum checked
-  await approveScan(base, 1980, me); // timer: 33:00 of active time
+  await approveScan(base, 1980, me, 2400); // timer: 33:00 active, 40:00 total (open → approved)
 
   // Day 1: Daniel presses "Export to Excel" in Results with "Only rows not exported yet" (the default).
   const daily = [];
@@ -71,7 +71,7 @@ export async function runScenario() {
     const wbDay = buildWorkbook(XLSX, { ...sel, initials: 'DR', date: `2026-10-${day}` });
     const readme = XLSX.utils.sheet_to_json(wbDay.Sheets['Read me'], { header: 1 }).map((r) => r[0]).filter(Boolean).slice(1);
     await markExported(sel.nodules, `2026-10-${day}T18:00:00.000Z`);
-    daily.push({ day: `Oct ${day}`, rows: rows.map((r) => `${r[2]} ${r[5]}`), readme });
+    daily.push({ day: `Oct ${day}`, rows: rows.map((r) => `${r[2]} ${r[5] ?? `(${r[14]})`}`), readme });
   };
   await exportPending(15);
 
@@ -83,8 +83,18 @@ export async function runScenario() {
       match: { prior_scan_id: 'RIDER-TEST_test', prior_finding_id: 'F1', distance_mm: 3.1, confidence: 0.91, set_by: 'ai' } }),
     finding({ finding_id: 'F2', lobe: 'RML', type_guess: 'Solid', key_slice_z: 175, key_slice_number: 176, long_axis_mm: 4.4, short_axis_mm: 4.0, volume_mm3: 38, solid_component_mm: null, cx: 260, cy: 300 }),
   ], prior);
+  // The engine did not find prior F2 (= Baseline N2) on the follow-up → match_summary.not_found_in_current = ['F2'].
+  // Baseline N4 was added by hand (the engine can't match it), so it is asked about too. N3 was rejected → not asked.
+  await initNotFound(fu, { new_in_current: ['F2'], not_found_in_current: ['F2'] }, prior);
   // State right after the AI draft, before Daniel touches anything (to prove the AI does not fill Match to prior).
-  const afterInit = (await Nodule.filter({ scan: fu.id })).items.map((n) => ({ label: n.nodule_label, match_to_prior: n.match_to_prior, ai_suggests: n.ai_draft?.match_label }));
+  const fuItems = (await Nodule.filter({ scan: fu.id })).items;
+  const afterInit = fuItems.filter((n) => n.kind !== 'prior_not_found').map((n) => ({ label: n.nodule_label, match_to_prior: n.match_to_prior, ai_suggests: n.ai_draft?.match_label }));
+  const notFoundAfterInit = fuItems.filter((n) => n.kind === 'prior_not_found').map((n) => ({ prior: n.prior_label, status: n.status, match_to_prior: n.match_to_prior, from_engine: n.ai_draft?.from_engine }));
+  const nf = async (label) => (await Nodule.filter({ scan: fu.id, kind: 'prior_not_found' })).items.find((n) => n.prior_label === label);
+  // Prior N2: Daniel scrolls, doesn't see it, confirms "not found" with his note (same call as the Review screen).
+  await saveNodule(fu, await nf('N2'), { status: 'Accepted', reject_reason: '', match_to_prior: 'Not found', notes: 'Not seen on this scan, likely resolved' }, me);
+  // Prior N4: Daniel says "It's here" (he'll mark it) → not exported as Not found.
+  await saveNodule(fu, await nf('N4'), { status: 'Rejected', reject_reason: 'Seen in this scan', match_to_prior: '' }, me);
   // N1: Daniel clicks "Use suggestion" (N1), confirms the outline, accepts.
   await save(fu, 'N1', { match_to_prior: 'N1' });
   await save(fu, 'N1', { outline_confirmed: true, outline_confirmed_by_initials: 'DR', outline_confirmed_at: new Date().toISOString() });
@@ -94,7 +104,7 @@ export async function runScenario() {
   await save(fu, 'N2', { notes: 'New since prior, faint' });
   await save(fu, 'N2', { status: 'Accepted' });
   await markCentralChecked(fu, me);
-  await approveScan(fu, 1500, me); // 25:00
+  await approveScan(fu, 1500, me, 1860); // 25:00 active, 31:00 total
   // Day 2: export again (default "only new"): should hold only the follow-up rows.
   await exportPending(16);
   // Day 3: Daniel adds a note to an already-exported Baseline row → it changed, so it goes out again; nothing else does.
@@ -109,5 +119,5 @@ export async function runScenario() {
   const nodules = (await Nodule.filter({ scan: { $in: ids }, status: 'Accepted' }, { sort: 'nodule_label' })).items;
   const events = (await EditEvent.filter({ scan: { $in: ids } }, { sort: 'edited_at' })).items;
   const wb = buildWorkbook(XLSX, { scans, nodules, events, initials: 'DR', date: '2026-10-15' });
-  return { wb, afterInit, daily, all: { scans, nodules: (await Nodule.filter({})).items } };
+  return { wb, afterInit, notFoundAfterInit, daily, all: { scans, nodules: (await Nodule.filter({})).items } };
 }
