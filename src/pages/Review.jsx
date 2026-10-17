@@ -129,12 +129,12 @@ function ReviewScan() {
   };
   // First selection: where "Save & exit" left off, else the first item still open (Central areas if only that is left).
   useEffect(() => {
-    if (selId || !scan || !nodQ.data || scan.review_status === 'Not started') return;
+    if (selId || !scan || !nodQ.data || nodQ.isFetching || scan.review_status === 'Not started') return;
     const resume = scan.resume_item_id;
     if (resume && (resume === CENTRAL || nodules.some((n) => n.id === resume))) return select(resume === CENTRAL ? { id: CENTRAL } : nodules.find((n) => n.id === resume));
     const open = nodules.find((n) => !(n.status === 'Accepted' || n.status === 'Rejected'));
     select(open || (!scan.central_checked_at || !nodules.length ? { id: CENTRAL } : nodules[0]));
-  }, [nodules.length, scan?.review_status, !!meta]);
+  }, [nodules.length, scan?.review_status, !!meta, nodQ.isFetching]);
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['nodules', id] });
   const save = async (patch, opts) => {
