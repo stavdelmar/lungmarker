@@ -8,6 +8,7 @@ import { fmtMaybe, boxOf } from '@/components/review/viewerUtils';
 const shapesOf = (n) => [...(n.key_contour_px?.length > 2 ? [{ poly: n.key_contour_px, color: '#5eead4' }] : []), ...(n.long_axis_px ? [{ line: n.long_axis_px, color: '#f0abfc' }] : [])];
 const focusOf = (n) => (n.key_contour_px?.length ? n.key_contour_px : n.long_axis_px || []);
 const sizeOf = (n) => { const b = boxOf(n); return b ? Math.max(b[2] - b[0], b[3] - b[1]) / 2 + 40 : 60; };
+const shortTp = (t = '') => (t === 'Baseline' ? 'BL' : t.replace(/^Follow-up\s*/i, 'FU'));
 const num = (l) => parseInt(String(l).slice(1), 10) || 0;
 const btn = 'h-9 flex-1 min-w-20 px-3 whitespace-nowrap rounded-md text-sm font-medium border flex items-center justify-center gap-1.5 disabled:opacity-40';
 
@@ -27,7 +28,8 @@ export default function MatchCompare({ sel, nodules, prior, aiSuggest, locked, o
   const rest = [...priorNodules].filter((x) => x.nodule_label !== cand).sort((a, b) => num(a.nodule_label) - num(b.nodule_label));
   const card = (n, tag, s, cls) => (
     <button onClick={() => onOpenPrior(pn)} title="Open side by side (synced scrolling)" className="flex-1 min-w-0 text-left rounded-md p-1 hover:bg-slate-100">
-      <div className="text-[11px] mb-1 truncate"><span className={`font-semibold tracking-wide ${cls}`}>{tag}</span><span className="text-slate-500"> · {s?.timepoint} · {s?.scan_date?.slice(0, 10)}</span></div>
+      {/* Full date always visible: timepoint shortened (Baseline → BL, Follow-up 2 → FU2), wraps instead of truncating. */}
+      <div className="text-[11px] mb-1 leading-tight" title={`${s?.timepoint || ''} · ${s?.scan_date?.slice(0, 10) || ''}`}><span className={`font-semibold tracking-wide ${cls}`}>{tag}</span><span className="text-slate-500"> · {shortTp(s?.timepoint)} · <span className="font-mono whitespace-nowrap">{s?.scan_date?.slice(0, 10)}</span></span></div>
       <CropView className="w-full aspect-square rounded" src={engine.sliceUrl(base, s?.engine_scan_id || n.engine_scan_id, 'lung', n.key_slice_z)} focus={focusOf(n)} half={half} shapes={shapesOf(n)} />
       <div className="mt-1 text-xs"><b className="font-mono">{n.nodule_label}</b> · {n.lobe || '—'} · long <span className="font-mono">{fmtMaybe(n.long_axis_mm)}</span> mm</div>
     </button>

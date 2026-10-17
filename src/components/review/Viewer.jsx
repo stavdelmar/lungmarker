@@ -7,7 +7,7 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 // (in Erase / Draw: middle button or Space + drag). focus = {id, box:[x0,y0,x1,y1]}: when the id changes, the view
 // centres on the box and zooms so it fills about a quarter of the view.
 export const MAX_ZOOM = 12;
-export default function Viewer({ src, cols, rows, zoom, setZoom, pan, setPan, onStep, onImageClick, onDrag, onDragEnd, cursor, strokeMode, onStrokeEnd, focus, children }) {
+export default function Viewer({ src, cols, rows, zoom, setZoom, pan, setPan, onStep, onImageClick, onDrag, onDragEnd, cursor, strokeMode, onStrokeEnd, focus, onFit, children }) {
   const boxRef = useRef(), svgRef = useRef();
   const [fit, setFit] = useState(1);
   const [err, setErr] = useState(false);
@@ -16,13 +16,18 @@ export default function Viewer({ src, cols, rows, zoom, setZoom, pan, setPan, on
   const [stroke, setStroke] = useState(null);
   const [hover, setHover] = useState(null);
   const cb = useRef({});
+  const fitCb = useRef(onFit); fitCb.current = onFit;
   cb.current = { onStep, onDrag, onDragEnd, onStrokeEnd, strokeMode, zoom, pan, fit: 0 };
   const [panning, setPanning] = useState(false);
 
   useEffect(() => setErr(false), [src]);
   useEffect(() => {
     const el = boxRef.current;
-    const ro = new ResizeObserver(() => el.clientWidth && setFit(Math.min(el.clientWidth / cols, el.clientHeight / rows) * 0.98));
+    const ro = new ResizeObserver(() => {
+      if (!el.clientWidth) return;
+      const f = Math.min(el.clientWidth / cols, el.clientHeight / rows) * 0.98;
+      setFit(f); fitCb.current?.({ fit: f, w: el.clientWidth, h: el.clientHeight }); // linked split view needs it
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, [cols, rows]);

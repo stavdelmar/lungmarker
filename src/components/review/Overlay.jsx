@@ -1,6 +1,6 @@
 import { uncertainty } from '@/lib/uncertainty';
 import { tone, STROKE } from '@/lib/noduleTone';
-import { lenMm } from '@/lib/geometry';
+import { calipers } from '@/lib/calipers';
 
 const pts = (p) => p.map((q) => q.join(',')).join(' ');
 const AXES = ['long_axis_px', 'short_axis_px'];
@@ -27,14 +27,16 @@ export default function Overlay({ sp, shapes, selId, draft, isKey, editable, sca
         const x = Math.max(...p.map((q) => q[0])), y = Math.min(...p.map((q) => q[1]));
         return <text key={'t' + n.id} x={x + 5 / scale} y={y} fontSize={fs} fontFamily="JetBrains Mono, monospace" fill={STROKE[tone(n)]} fontWeight={n.id === selId ? 700 : 400} style={{ pointerEvents: 'none' }}>{n.nodule_label}{uncertainty(n).unsure && n.status === 'Pending' ? ' ?' : ''}</text>;
       })}
-      {/* Caliper lengths on the lines themselves (follow the drag live). */}
-      {isKey && draft && AXES.map((k) => {
-        const s = draft[k];
-        if (s?.length !== 2) return null;
-        const mm = lenMm(s, sp || [1, 1]);
-        return <text key={'mm' + k} x={(s[0][0] + s[1][0]) / 2 + 4 / scale} y={(s[0][1] + s[1][1]) / 2 - 4 / scale} fontSize={fs} fontFamily="JetBrains Mono, monospace"
-          fill="#f0abfc" stroke="#000" strokeWidth={sw(3)} paintOrder="stroke" style={{ pointerEvents: 'none' }}>{mm == null ? '' : `${mm.toFixed(1)} mm`}</text>;
-      })}
+      {/* Caliper lengths (Stav, 17 Oct: they sat on top of each other in the middle of the nodule). Each label is a small
+          dark pill "L 7.0 mm" / "S 6.7 mm" outside the outline, beyond one end of its own axis (long → right-hand end,
+          short → lower end), offset along the axis; if the two pills would overlap, the short one goes to its other
+          end. A pill starts past the outline's furthest point in that direction, so it never covers the outline points. */}
+      {isKey && draft && calipers(draft, sp, scale, fs).map((c) => (
+        <g key={c.key} data-caliper={c.key} style={{ pointerEvents: 'none' }}>
+          <rect x={c.x - c.w / 2} y={c.y - c.h / 2} width={c.w} height={c.h} rx={c.h / 2} fill="rgba(0,0,0,0.8)" stroke="#f0abfc" strokeOpacity={0.55} strokeWidth={sw(0.75)} />
+          <text x={c.x} y={c.y} textAnchor="middle" dominantBaseline="central" fontSize={fs} fontFamily="JetBrains Mono, monospace" fill="#f0abfc">{c.label}</text>
+        </g>
+      ))}
       {isKey && draft?.long_axis_px?.length === 2 && <line x1={draft.long_axis_px[0][0]} y1={draft.long_axis_px[0][1]} x2={draft.long_axis_px[1][0]} y2={draft.long_axis_px[1][1]} stroke="#f0abfc" strokeWidth={sw(1.5)} style={{ pointerEvents: 'none' }} />}
       {isKey && draft?.short_axis_px?.length === 2 && <line x1={draft.short_axis_px[0][0]} y1={draft.short_axis_px[0][1]} x2={draft.short_axis_px[1][0]} y2={draft.short_axis_px[1][1]} stroke="#f0abfc" strokeWidth={sw(1.5)} strokeDasharray={`${sw(5)} ${sw(4)}`} style={{ pointerEvents: 'none' }} />}
       {isKey && editable && draft && (

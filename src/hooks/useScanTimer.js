@@ -15,6 +15,14 @@ export function creditTotal(lastTick, now, lastInput, idleSeconds = TOTAL_IDLE_S
   const until = Math.min(now, lastInput + idleSeconds * 1000);
   return Math.max(0, until - lastTick);
 }
+// Both clocks over the same interval, in ms (bug 17 Oct: active was counted +1 per 1-s tick while open was measured
+// and rounded down, so the header could show "2:02 active · 2:01 open"). Active = the part of the interval with
+// the tab visible and input within idleActive seconds; it can never exceed the open time of the same interval.
+export function creditBoth(lastTick, now, lastInput, { idleActive, hidden }) {
+  const total = creditTotal(lastTick, now, lastInput, TOTAL_IDLE_SECONDS);
+  const active = hidden ? 0 : Math.min(total, creditTotal(lastTick, now, lastInput, idleActive));
+  return { total, active };
+}
 
 export function useScanTimer({ scanId, initial, initialTotal, enabled, idleSeconds }) {
   const [secs, setSecs] = useState(0);
@@ -22,13 +30,18 @@ export function useScanTimer({ scanId, initial, initialTotal, enabled, idleSecon
   const [paused, setPaused] = useState(false);
   const [totalPaused, setTotalPaused] = useState(false);
   const secsRef = useRef(0), savedRef = useRef(0), lastAct = useRef(Date.now()), loaded = useRef(null), enRef = useRef(enabled);
-  const totalMs = useRef(0), lastTick = useRef(null), savedTotal = useRef(0);
-  enRef.current = enabled;
+  const totalMs = useRef(0), activeMs = useRef(0), lastTick = useRef(null), savedTotal = useRef(0), idleRef = useRef(idleSeconds);
+  enRef.current = enabled; idleRef.current = idleSeconds || 120;
 
   // Credit time since the last tick (only while running), then report whole seconds.
   const tick = () => {
     const now = Date.now();
-    if (lastTick.current != null) totalMs.current += creditTotal(lastTick.current, now, lastAct.current);
+    if (lastTick.current != null) {
+      const c = creditBoth(lastTick.current, now, lastAct.current, { idleActive: idleRef.current, hidden: document.hidden });
+      totalMs.current += c.total; activeMs.current += c.active;
+      if (activeMs.current > totalMs.current) activeMs.current = totalMs.current; // invariant, also for restored values
+      secsRef.current = Math.floor(activeMs.current / 1000);
+    }
     lastTick.current = enRef.current ? now : null;
   };
   const totalNow = () => { tick(); return Math.floor(totalMs.current / 1000); };
@@ -36,10 +49,12 @@ export function useScanTimer({ scanId, initial, initialTotal, enabled, idleSecon
   useEffect(() => {
     if (scanId && loaded.current !== scanId && initial !== undefined) {
       loaded.current = scanId;
-      secsRef.current = savedRef.current = initial || 0;
-      totalMs.current = (initialTotal || 0) * 1000; savedTotal.current = initialTotal || 0;
+      // Saved values from before this fix could have active > total; the open time is the ceiling.
+      const tot = initialTotal || 0, act = Math.min(initial || 0, Math.max(tot, initialTotal == null ? (initial || 0) : 0));
+      secsRef.current = savedRef.current = act; activeMs.current = act * 1000;
+      totalMs.current = Math.max(tot, act) * 1000; savedTotal.current = Math.max(tot, act);
       lastTick.current = null;
-      setSecs(initial || 0); setTotal(initialTotal || 0);
+      setSecs(act); setTotal(Math.max(tot, act));
     }
   }, [scanId, initial, initialTotal]);
 
@@ -76,11 +91,10 @@ export function useScanTimer({ scanId, initial, initialTotal, enabled, idleSecon
   useEffect(() => {
     if (!enabled) return undefined;
     const t = setInterval(() => {
-      setTotal(totalNow());
+      setTotal(totalNow()); // also credits the active clock (same interval)
+      setSecs(secsRef.current);
       setTotalPaused(Date.now() - lastAct.current >= TOTAL_IDLE_SECONDS * 1000);
-      const active = !document.hidden && Date.now() - lastAct.current < idleSeconds * 1000;
-      setPaused(!active);
-      if (active) { secsRef.current += 1; setSecs(secsRef.current); }
+      setPaused(document.hidden || Date.now() - lastAct.current >= idleSeconds * 1000);
       if (secsRef.current - savedRef.current >= 15 || totalNow() - savedTotal.current >= 15) save();
     }, 1000);
     return () => clearInterval(t);
@@ -88,12 +102,13 @@ export function useScanTimer({ scanId, initial, initialTotal, enabled, idleSecon
 
   // Pilot / mistakes: start this scan's clocks from zero (saved at once).
   const reset = () => {
-    secsRef.current = savedRef.current = 0; totalMs.current = 0; savedTotal.current = 0;
+    secsRef.current = savedRef.current = 0; totalMs.current = 0; activeMs.current = 0; savedTotal.current = 0;
     lastAct.current = Date.now(); lastTick.current = enRef.current ? Date.now() : null;
     setSecs(0); setTotal(0); setPaused(false); setTotalPaused(false);
     if (scanId) return base44.entities.Scan.update(scanId, { active_seconds: 0, total_seconds: 0, first_opened_at: new Date().toISOString() });
     return Promise.resolve();
   };
 
-  return { secs, total, paused, totalPaused, reset, save, getSecs: () => secsRef.current, getTotal: totalNow };
+  const getTotal = totalNow; // credits both clocks
+  return { secs, total, paused, totalPaused, reset, save, getSecs: () => { totalNow(); return secsRef.current; }, getTotal };
 }

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Check, X, ChevronRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Check, X, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
 import Step from '@/components/review/Step';
 import MatchCompare from '@/components/review/MatchCompare';
 import { matchWarnings } from '@/lib/matchChecks';
@@ -9,6 +9,7 @@ import { fmtMaybe } from '@/components/review/viewerUtils';
 import { uncertainty } from '@/lib/uncertainty';
 
 const quick = 'h-8 min-w-16 px-3 rounded-md border border-rose-200 bg-white text-rose-700 text-xs hover:bg-rose-50 whitespace-nowrap';
+const endBtn = 'h-8 px-2.5 rounded-md border text-xs font-medium flex items-center gap-1 whitespace-nowrap';
 const big = 'h-9 flex-1 min-w-24 px-3 rounded-md text-sm font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap';
 
 // Daniel's order: 1 is it a nodule · 2 outline & measurements · 3 match to prior (follow-ups) · 4 notes & accept.
@@ -18,6 +19,15 @@ export default function NoduleSteps({ sel, nodules, locked, followup, canAccept,
   const [measOk, setMeasOk] = useState(false);
   const [openStep, setOpenStep] = useState(null);
   const [rejecting, setRejecting] = useState(false);
+  // First / last outlined slice checked (Stav, 17 Oct): turns green once that slice has been shown — by these buttons,
+  // the ↑ ↓ shortcut on the image, or scrolling there. Information only; never blocks Confirm outline.
+  const span = formProps.span;
+  const [seenEnds, setSeenEnds] = useState({ first: false, last: false });
+  useEffect(() => {
+    if (!span || formProps.z == null) return;
+    if (formProps.z === span.first) setSeenEnds((c) => (c.first ? c : { ...c, first: true }));
+    if (formProps.z === span.last) setSeenEnds((c) => (c.last ? c : { ...c, last: true }));
+  }, [formProps.z, span?.first, span?.last]);
   const u = uncertainty(sel);
   const rejected = sel.status === 'Rejected', accepted = sel.status === 'Accepted';
   const done = [sel.status !== 'Pending' || isNodule, accepted || measOk, !followup || !!sel.match_to_prior, accepted];
@@ -60,7 +70,18 @@ export default function NoduleSteps({ sel, nodules, locked, followup, canAccept,
           </div>
         )}
         <p className="text-[11.5px] text-slate-500">Edit the outline on the image (Erase E · Draw D), then confirm it.</p>
-        {formProps.span && <p className="text-[11.5px] text-slate-500">Check the first and last slices (↑ ↓ on the image): small end slices affect the volume.</p>}
+        {span && (
+          <div className="flex flex-wrap items-center gap-1.5" title="Small end slices change the volume: check both ends of the outline">
+            <span className="text-[12px] text-slate-600 mr-auto">Slices <span className="font-mono">{span.firstNum}–{span.lastNum}</span></span>
+            {[['first', 'First', span.first, span.firstNum, ArrowUp], ['last', 'Last', span.last, span.lastNum, ArrowDown]].map(([k, label, zz, num, Icon]) => (
+              <button key={k} type="button" data-end={k} onClick={() => { formProps.goSlice?.(zz); setSeenEnds((c) => ({ ...c, [k]: true })); }}
+                className={`${endBtn} ${seenEnds[k] ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
+                title={`Go to the ${k} outlined slice (#${num})`}>
+                {seenEnds[k] ? <Check className="w-3.5 h-3.5" /> : <Icon className="w-3.5 h-3.5" />}{label} · <span className="font-mono">{num}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <VolumeConfirm n={sel} locked={locked} onSave={formProps.onSave} onConfirm={formProps.onConfirm} />
         <Measurements n={sel} locked={locked} onSave={formProps.onSave} />
         {!locked && !accepted && <button onClick={() => advance(() => setMeasOk(true))} className="h-8 min-w-24 px-3 rounded-md bg-slate-900 text-white text-sm hover:bg-slate-800 flex items-center justify-center gap-1 whitespace-nowrap">Continue<ChevronRight className="w-4 h-4" /></button>}

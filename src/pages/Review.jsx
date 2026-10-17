@@ -176,11 +176,6 @@ function ReviewScan() {
     return { n, polys };
   }).map((s) => (s.n.id === selId && span && (z === span.first || z === span.last) ? { ...s, end: true } : s)), [nodules, showRejected, z, selId, draft, findingsById, meta, span]);
 
-  const onDrag = (h, pt) => setDraft((d) => {
-    const key = h.kind === 'contour' ? 'key_contour_px' : h.kind;
-    const nd = { ...d, [key]: d[key].map((p, i) => (i === h.idx ? pt : p)) };
-    draftRef.current = nd; return nd;
-  });
   // Hand-edited outline → the volume is recomputed at once in the browser (engine volume for the other
   // slices + the edited key slice), so a confirmed outline always has a volume. With a live engine, the
   // engine then redoes the 3D outline from Daniel's polygon and its volume replaces the browser one.
@@ -192,15 +187,18 @@ function ReviewScan() {
     if (f.volume_mm3 != null) await saveNodule(scan, fresh, { volume_mm3: Math.round(f.volume_mm3), volume_stale: false }, me);
     await refresh();
   });
-  const onDragEnd = (h) => {
-    const d = draftRef.current;
+  // d = the dragged copy from the viewer (the drag itself is handled there, see ViewerPane).
+  const onDragEnd = (h, d) => {
     if (h.kind === 'contour' && JSON.stringify(d.key_contour_px) === JSON.stringify(sel.key_contour_px)) return; // a click on a point (select), not a move
     if (h.kind === 'contour') {
       // Same path as Erase / Draw: axes and volume follow the moved points at once, and Undo works.
       const nid = sel.id;
       editSlice(sel, sel.key_slice_z, d.key_contour_px, 'points moved by hand; axes and volume recomputed')
         .then(() => { if (refineOk && sel.engine_finding_id) recomputeFromPolygon(nid, d.key_contour_px); });
-    } else save({ [h.kind]: d[h.kind], [h.kind === 'long_axis_px' ? 'long_axis_mm' : 'short_axis_mm']: lenMm(d[h.kind], sp) });
+    } else {
+      draftRef.current = d; setDraft(d); // keep the moved axis end on screen while it saves
+      save({ [h.kind]: d[h.kind], [h.kind === 'long_axis_px' ? 'long_axis_mm' : 'short_axis_mm']: lenMm(d[h.kind], sp) });
+    }
   };
 
   // ---- Single points (Stav, 17 Oct): click an edge to add one; Alt+click a point, or select it + Backspace, to delete.
@@ -229,6 +227,11 @@ function ReviewScan() {
   // Replace nodule n's outline on slice zz; axes (key slice) and volume update at once in the browser.
   const editSlice = async (n, zz, newPoly, source) => {
     const patch = slicePatch(n, zz, newPoly, { sp, dz, engineContours: contoursOf(n), slices: meta.slices });
+    // Show the result at once (outline + recomputed axes), before the save round-trip — no jump on release.
+    if (n.id === sel?.id && zz === n.key_slice_z) {
+      const nd = { key_contour_px: patch.key_contour_px ?? newPoly, long_axis_px: patch.long_axis_px ?? draftRef.current?.long_axis_px, short_axis_px: patch.short_axis_px ?? draftRef.current?.short_axis_px };
+      draftRef.current = nd; setDraft(nd);
+    }
     undoRef.current.push({ id: n.id, prev: Object.fromEntries(OUTLINE_FIELDS.map((f) => [f, n[f] ?? null])) });
     if (undoRef.current.length > 30) undoRef.current.shift();
     await saveNodule(scan, n, patch, me, { source });
@@ -464,7 +467,7 @@ function ReviewScan() {
           ) : (
             <ViewerPane meta={meta} base={base} sid={sid} z={z} step={step} setZ={setZ} win={win} setWin={setWin} nodules={nodules} shapes={shapes}
               sel={sel} draft={draft} editable={!locked} mode={mode} clicks={clicks} onSelect={select} onImageClick={onImageClick} points={points}
-              onDrag={onDrag} onDragEnd={onDragEnd} showRejected={showRejected} setShowRejected={setShowRejected} modeBar={modeBar} busy={busy}
+              onDragEnd={onDragEnd} showRejected={showRejected} setShowRejected={setShowRejected} modeBar={modeBar} busy={busy}
               onStrokeEnd={onStrokeEnd} brushPx={brushPx} span={span}
               priorView={priorView && priorQ.data?.scan ? { base, priorScan: priorQ.data.scan, pn: priorView, onClose: () => setPriorView(null) } : null}
               tools={{

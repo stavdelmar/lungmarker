@@ -6,7 +6,9 @@ import PriorPane from '@/components/review/PriorPane';
 import Viewer, { MAX_ZOOM } from '@/components/review/Viewer';
 import Overlay from '@/components/review/Overlay';
 import SliceSlider from '@/components/review/SliceSlider';
-import { tone } from '@/lib/noduleTone';
+import { sliceTicks } from '@/lib/noduleTone';
+import { useQuery } from '@tanstack/react-query';
+import { initialLink, paneView, linkFromPane } from '@/lib/linkedView';
 
 const btn = 'h-7 px-2.5 rounded text-xs border border-neutral-700 text-neutral-300 hover:bg-neutral-800 disabled:opacity-35 disabled:hover:bg-transparent flex items-center gap-1.5';
 const on = 'bg-teal-400 text-teal-950 border-teal-400 hover:bg-teal-300';
@@ -46,7 +48,7 @@ function OutlineTools({ t }) {
 }
 
 export default function ViewerPane(p) {
-  const { meta, base, sid, z, step, setZ, win, setWin, nodules, shapes, sel, draft, editable, mode, clicks, onSelect, onImageClick, onDrag, onDragEnd, showRejected, setShowRejected, modeBar, busy, onStrokeEnd, brushPx, tools, priorView, points, span } = p;
+  const { meta, base, sid, z, step, setZ, win, setWin, nodules, shapes, sel, draft, editable, mode, clicks, onSelect, onImageClick, onDragEnd, showRejected, setShowRejected, modeBar, busy, onStrokeEnd, brushPx, tools, priorView, points, span } = p;
   const strokeMode = mode === 'erase' || mode === 'draw';
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -57,13 +59,79 @@ export default function ViewerPane(p) {
   const fitView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
   const box = useMemo(() => boxOf(sel), [sel?.id]);
   const split = !!priorView;
-  const focus = useMemo(() => (sel && box ? { id: `${sel.id}${split ? ':split' : ''}`, box } : null), [sel?.id, box, split]);
+  // Re-centre on the nodule when the split closes (the pane got wider): a new focus id per close.
+  const [splitGen, setSplitGen] = useState(0);
+  useEffect(() => { if (!split) setSplitGen((g) => g + 1); }, [split]);
+  const focusSingle = useMemo(() => (sel && box ? { id: `${sel.id}:${splitGen}`, box } : null), [sel?.id, box, splitGen]);
+
+  // ---- Split view locked to the prior (Stav, 17 Oct): both panes open centred on their own nodule at the same mm
+  // zoom; panning / zooming either pane moves both (shared link, lib/linkedView); scrolling maps slices by mm.
+  const pn = priorView?.pn;
+  const priSid = priorView?.priorScan?.engine_scan_id;
+  const priMetaQ = useQuery({ queryKey: ['meta', base, priSid], enabled: split && !!base && !!priSid, retry: false, queryFn: () => engine.meta(base, priSid) });
+  const priMeta = priMetaQ.data;
+  const [fits, setFits] = useState({});
+  const [link, setLink] = useState(null);
+  const linkRef = useRef(null); linkRef.current = link;
+  useEffect(() => setLink(null), [pn?.id, sel?.id, split]);
+  const curPane = useMemo(() => ({ box, sp, cols: meta.cols, rows: meta.rows, fit: fits.cur?.fit }), [box, sp, meta.cols, meta.rows, fits.cur?.fit]);
+  const priBox = useMemo(() => (pn ? boxOf(pn) : null), [pn?.id]);
+  const priPane = useMemo(() => (priMeta ? { box: priBox, sp: priMeta.pixel_spacing_mm || [1, 1], cols: priMeta.cols, rows: priMeta.rows, fit: fits.pri?.fit } : null), [priMeta, priBox, fits.pri?.fit]);
+  const ready = split && !!priPane && !!fits.cur && !!fits.pri;
+  useEffect(() => {
+    if (ready && !link) setLink(initialLink({ boxes: [curPane.box, priPane.box], sps: [curPane.sp, priPane.sp], panes: [fits.cur, fits.pri], fits: [fits.cur.fit, fits.pri.fit], maxZoom: MAX_ZOOM }));
+  }, [ready, link]);
+  const linked = ready && !!link;
+  const pendingZoom = useRef(null);
+  const adapter = (key, pane) => {
+    const cur = () => paneView(linkRef.current, pane);
+    return {
+      setZoom: (zv) => { // zoom about the pane centre (toolbar / keys); the wheel follows with setPan at the cursor
+        const v = cur(); const z1 = typeof zv === 'function' ? zv(v.zoom) : zv; const r = z1 / v.zoom;
+        pendingZoom.current = { key, z1 };
+        setLink((l) => ({ k: l.k * r, o: [l.o[0] * r, l.o[1] * r] }));
+      },
+      setPan: (pv) => {
+        const v = cur(); const zNow = pendingZoom.current?.key === key ? pendingZoom.current.z1 : v.zoom; pendingZoom.current = null;
+        const p = typeof pv === 'function' ? pv(v.pan) : pv;
+        setLink(linkFromPane({ zoom: zNow, pan: p }, pane));
+      },
+    };
+  };
+  const curAdapter = linked ? adapter('cur', curPane) : null;
+  const curView = linked ? { ...paneView(link, curPane), ...curAdapter } : { zoom, pan, setZoom, setPan };
+  const priView = linked ? { ...paneView(link, priPane), ...adapter('pri', priPane) } : null;
+  const focus = split ? null : focusSingle;
+  const zoomCtl = useRef(setZoom); zoomCtl.current = curView.setZoom;
+  const fitAll = () => (split ? setLink(null) : fitView());
+
+  // Live drag of outline points / axis ends (Stav, 17 Oct: dragging wasn't smooth). The dragged copy lives here, so a
+  // pointer move re-renders only the image (not the whole Review page), at most once per screen frame. Axes and
+  // volume are computed once, on release (the page sets them at once, before the save returns).
+  const [live, setLive] = useState(null);
+  const liveRef = useRef(null), rafRef = useRef(0);
+  useEffect(() => { liveRef.current = null; setLive(null); }, [draft]);
+  const dragMove = (h, pt) => {
+    const cur = liveRef.current || draft;
+    const key = h.kind === 'contour' ? 'key_contour_px' : h.kind;
+    if (!cur?.[key]) return;
+    liveRef.current = { ...cur, [key]: cur[key].map((q, i) => (i === h.idx ? pt : q)) };
+    if (!rafRef.current) rafRef.current = requestAnimationFrame(() => { rafRef.current = 0; setLive(liveRef.current); });
+  };
+  const dragEnd = (h) => {
+    cancelAnimationFrame(rafRef.current); rafRef.current = 0;
+    const d = liveRef.current; liveRef.current = null;
+    if (d) onDragEnd(h, d);
+    setLive(null); // same event as the page's new draft → one render, no flash back
+  };
+  const shownDraft = live || draft;
+  const shownShapes = live && sel && isKey ? shapes.map((s) => (s.n.id === sel.id ? { ...s, polys: [live.key_contour_px] } : s)) : shapes;
 
   useEffect(() => {
     const h = (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-      if (e.key === '+' || e.key === '=') setZoom((v) => Math.min(MAX_ZOOM, v * 1.2));
-      if (e.key === '-') setZoom((v) => Math.max(0.5, v / 1.2));
+      if (e.key === '+' || e.key === '=') zoomCtl.current((v) => Math.min(MAX_ZOOM, v * 1.2));
+      if (e.key === '-') zoomCtl.current((v) => Math.max(0.5, v / 1.2));
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
@@ -77,10 +145,10 @@ export default function ViewerPane(p) {
         ))}
         {tools && <><span className="w-px h-5 bg-neutral-800 mx-1" /><OutlineTools t={tools} /></>}
         <span className="w-px h-5 bg-neutral-800 mx-1" />
-        <button className={btn} onClick={() => setZoom((v) => Math.max(0.5, v / 1.2))} title="Zoom out (−) · Ctrl/⌘ + wheel or pinch zooms at the cursor"><Minus className="w-3 h-3" /></button>
-        <span className="font-mono w-10 text-center text-neutral-400">{Math.round(zoom * 100)}%</span>
-        <button className={btn} onClick={() => setZoom((v) => Math.min(MAX_ZOOM, v * 1.2))} title="Zoom in (+) · Ctrl/⌘ + wheel or pinch zooms at the cursor"><Plus className="w-3 h-3" /></button>
-        <button className={btn} onClick={fitView} title="Show the whole slice">Fit</button>
+        <button className={btn} onClick={() => curView.setZoom((v) => Math.max(0.5, v / 1.2))} title="Zoom out (−) · Ctrl/⌘ + wheel or pinch zooms at the cursor"><Minus className="w-3 h-3" /></button>
+        <span className="font-mono w-10 text-center text-neutral-400">{Math.round(curView.zoom * 100)}%</span>
+        <button className={btn} onClick={() => curView.setZoom((v) => Math.min(MAX_ZOOM, v * 1.2))} title="Zoom in (+) · Ctrl/⌘ + wheel or pinch zooms at the cursor"><Plus className="w-3 h-3" /></button>
+        <button className={btn} onClick={fitAll} title={split ? 'Centre both panes on their nodules again' : 'Show the whole slice'}>Fit</button>
         <label className="flex items-center gap-1.5 ml-2 text-neutral-400 cursor-pointer whitespace-nowrap">
           <input type="checkbox" checked={showRejected} onChange={(e) => setShowRejected(e.target.checked)} className="accent-teal-400" /> Show rejected
         </label>
@@ -88,7 +156,7 @@ export default function ViewerPane(p) {
       </div>
       {modeBar}
       <div className="flex flex-1 min-h-0">
-        {priorView && <PriorPane {...priorView} sel={sel} z={z} step={step} />}
+        {priorView && <PriorPane {...priorView} sel={sel} z={z} step={step} view={priView} curSlices={meta.slices} onFit={(f) => setFits((c) => (c.pri?.fit === f.fit && c.pri?.w === f.w ? c : { ...c, pri: f }))} />}
         <div className={`relative flex flex-1 min-w-0 ${split ? 'border-l border-neutral-700' : ''}`}>
         {/* Corner read-out on the image, as in CT viewers: slice number, window, and the selected nodule's axes. */}
         <div className="absolute left-3 top-2 z-10 pointer-events-none font-mono text-[12px] leading-5 text-neutral-200 [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">
@@ -109,17 +177,18 @@ export default function ViewerPane(p) {
             Drag a point to move it · click the outline to add one · Alt+click{points.selected != null ? ' or Backspace' : ''} to delete
           </div>
         )}
-        <Viewer src={engine.sliceUrl(base, sid, win, z)} cols={meta.cols} rows={meta.rows} zoom={zoom} setZoom={setZoom} pan={pan} setPan={setPan}
-          onStep={step} onImageClick={onImageClick} onDrag={onDrag} onDragEnd={onDragEnd} cursor={mode === 'erase' ? 'none' : mode ? 'crosshair' : 'default'}
+        <Viewer src={engine.sliceUrl(base, sid, win, z)} cols={meta.cols} rows={meta.rows} zoom={curView.zoom} setZoom={curView.setZoom} pan={curView.pan} setPan={curView.setPan}
+          onFit={(f) => setFits((c) => (c.cur?.fit === f.fit && c.cur?.w === f.w ? c : { ...c, cur: f }))}
+          onStep={step} onImageClick={onImageClick} onDrag={dragMove} onDragEnd={dragEnd} cursor={mode === 'erase' ? 'none' : mode ? 'crosshair' : 'default'}
           strokeMode={strokeMode} onStrokeEnd={onStrokeEnd} focus={focus}>
           {({ scale, startDrag, stroke, hover, toImg }) => (
-            <Overlay sp={sp} shapes={shapes} selId={sel?.id} draft={draft} isKey={isKey} editable={editable && !mode} scale={scale}
+            <Overlay sp={sp} shapes={shownShapes} selId={sel?.id} draft={shownDraft} isKey={isKey} editable={editable && !mode} scale={scale}
               startDrag={startDrag} onSelect={onSelect} clicks={clicks} interactive={!mode} tool={mode} stroke={stroke} hover={hover} brushPx={brushPx} points={points} toImg={toImg} />
           )}
         </Viewer>
         </div>
         <SliceSlider z={z} n={n} onChange={setZ} range={span}
-          ticks={nodules.filter((x) => x.key_slice_z != null && (showRejected || x.status !== 'Rejected')).map((x) => ({ id: x.id, z: x.key_slice_z, label: x.nodule_label, color: tone(x), sel: x.id === sel?.id }))} />
+          ticks={sliceTicks(nodules, sel?.id, showRejected)} />
       </div>
     </div>
   );

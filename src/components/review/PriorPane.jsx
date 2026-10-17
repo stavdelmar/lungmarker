@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { priorSlice } from '@/lib/linkedView';
 import { useQuery } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { engine } from '@/api/engine';
@@ -8,18 +9,19 @@ import Viewer from '@/components/review/Viewer';
 const pts = (p) => p.map((q) => q.join(',')).join(' ');
 const noop = () => {};
 
-// Left half of the split view: the prior scan on the chosen prior nodule. Scrolling moves the current scan;
-// the prior follows to the matching slice (same offset from each nodule's key slice).
-export default function PriorPane({ base, priorScan, pn, sel, z, step, onClose }) {
+// Left half of the split view: the prior scan on the chosen prior nodule. Scrolling (either pane) moves the current
+// scan; the prior follows to the slice at the same mm distance from its nodule's key slice. Zoom and pan are
+// locked to the current pane by the parent (view = linked zoom/pan, see lib/linkedView); without it, free.
+export default function PriorPane({ base, priorScan, pn, sel, z, step, onClose, view, onFit, curSlices }) {
   const sid = priorScan.engine_scan_id;
   const metaQ = useQuery({ queryKey: ['meta', base, sid], enabled: !!base && !!sid, retry: false, queryFn: () => engine.meta(base, sid) });
   const meta = metaQ.data;
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const box = useMemo(() => boxOf(pn), [pn.id]);
-  const focus = useMemo(() => (box ? { id: pn.id, box } : null), [pn.id, box]);
+  const focus = useMemo(() => (box && !view ? { id: pn.id, box } : null), [pn.id, box, view]);
   const n = meta ? meta.n_slices || meta.slices?.length || 1 : 1;
-  const pz = Math.max(0, Math.min(n - 1, (pn.key_slice_z ?? 0) + (z - (sel?.key_slice_z ?? z))));
+  const pz = priorSlice(z, { selZ: sel?.key_slice_z ?? z, pnZ: pn.key_slice_z ?? 0, curSlices, priSlices: meta?.slices, nPrior: n });
   const sliceNo = meta?.slices?.find((s) => s.z === pz)?.slice_number ?? pz + 1;
   const isKey = pz === pn.key_slice_z;
   return (
@@ -31,8 +33,8 @@ export default function PriorPane({ base, priorScan, pn, sel, z, step, onClose }
       </div>
       <button onClick={onClose} className="absolute right-2 top-2 z-10 h-7 px-2.5 rounded text-xs bg-neutral-800 border border-neutral-600 text-neutral-100 hover:bg-neutral-700 flex items-center gap-1"><X className="w-3.5 h-3.5" />Close prior</button>
       {meta ? (
-        <Viewer src={engine.sliceUrl(base, sid, 'lung', pz)} cols={meta.cols} rows={meta.rows} zoom={zoom} setZoom={setZoom} pan={pan} setPan={setPan}
-          onStep={step} onImageClick={noop} onDrag={noop} onDragEnd={noop} cursor="default" focus={focus}>
+        <Viewer src={engine.sliceUrl(base, sid, 'lung', pz)} cols={meta.cols} rows={meta.rows} zoom={view ? view.zoom : zoom} setZoom={view ? view.setZoom : setZoom} pan={view ? view.pan : pan} setPan={view ? view.setPan : setPan}
+          onStep={step} onImageClick={noop} onDrag={noop} onDragEnd={noop} cursor="default" focus={focus} onFit={onFit}>
           {({ scale }) => (
             <g>
               {isKey && pn.key_contour_px?.length > 2 && <polygon points={pts(pn.key_contour_px)} fill="none" stroke="#5eead4" strokeWidth={1.5 / scale} />}

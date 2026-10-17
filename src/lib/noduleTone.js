@@ -10,3 +10,11 @@ export function tone(n) {
 }
 
 export const STROKE = { accepted: '#34d399', rejected: '#f87171', unsure: '#fbbf24', pending: '#94a3b8' };
+
+// Slice-bar marks: one per nodule with a key slice; colour = state (tone), the selected one is longer/thicker
+// (same colour). Rejected nodules only when "Show rejected" is on; "not found" items have no slice → no mark.
+export function sliceTicks(nodules, selId, showRejected) {
+  return nodules
+    .filter((x) => x.kind !== 'prior_not_found' && x.key_slice_z != null && (showRejected || x.status !== 'Rejected'))
+    .map((x) => ({ id: x.id, z: x.key_slice_z, label: x.nodule_label, color: tone(x), sel: x.id === selId }));
+}
