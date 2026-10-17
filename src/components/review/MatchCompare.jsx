@@ -25,12 +25,12 @@ export default function MatchCompare({ sel, nodules, prior, aiSuggest, locked, o
   // Soft check of the pair on screen (the candidate before saving, or the recorded match): never blocks.
   const warns = cand ? matchWarnings(sel, cand, priorNodules, nodules) : [];
   const rest = [...priorNodules].filter((x) => x.nodule_label !== cand).sort((a, b) => num(a.nodule_label) - num(b.nodule_label));
-  const card = (n, title, scanId) => (
-    <div className="flex-1 min-w-0">
-      <div className="text-[11px] text-slate-500 mb-1 truncate">{title}</div>
-      <CropView className="w-full aspect-square rounded" src={engine.sliceUrl(base, scanId, 'lung', n.key_slice_z)} focus={focusOf(n)} half={half} shapes={shapesOf(n)} />
+  const card = (n, tag, s, cls) => (
+    <button onClick={() => onOpenPrior(pn)} title="Open side by side (synced scrolling)" className="flex-1 min-w-0 text-left rounded-md p-1 hover:bg-slate-100">
+      <div className="text-[11px] mb-1 truncate"><span className={`font-semibold tracking-wide ${cls}`}>{tag}</span><span className="text-slate-500"> · {s?.timepoint} · {s?.scan_date?.slice(0, 10)}</span></div>
+      <CropView className="w-full aspect-square rounded" src={engine.sliceUrl(base, s?.engine_scan_id || n.engine_scan_id, 'lung', n.key_slice_z)} focus={focusOf(n)} half={half} shapes={shapesOf(n)} />
       <div className="mt-1 text-xs"><b className="font-mono">{n.nodule_label}</b> · {n.lobe || '—'} · long <span className="font-mono">{fmtMaybe(n.long_axis_mm)}</span> mm</div>
-    </div>
+    </button>
   );
   return (
     <div className="space-y-2.5">
@@ -40,7 +40,7 @@ export default function MatchCompare({ sel, nodules, prior, aiSuggest, locked, o
       </div>
       {pn && (
         <>
-          <div className="flex gap-2">{card(pn, `Prior · ${priorScan.timepoint} · ${priorScan.scan_date?.slice(0, 10)}`, priorScan.engine_scan_id)}{card(sel, 'Current', sel.engine_scan_id)}</div>
+          <div className="flex gap-2">{card(pn, 'PRIOR', priorScan, 'text-amber-700')}{card(sel, 'CURRENT', prior.scan, 'text-teal-700')}</div>
           <div className="flex items-center text-xs">
             {diff != null && <span>Change in long axis: <b className="font-mono">{diff >= 0 ? '+' : '−'}{fmtMaybe(Math.abs(diff))} mm</b></span>}
             <button onClick={() => onOpenPrior(pn)} className="ml-auto text-teal-700 hover:underline flex items-center gap-1"><Columns2 className="w-3.5 h-3.5" />Open prior side by side</button>

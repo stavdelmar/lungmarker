@@ -6,6 +6,7 @@ import PriorPane from '@/components/review/PriorPane';
 import Viewer, { MAX_ZOOM } from '@/components/review/Viewer';
 import Overlay from '@/components/review/Overlay';
 import SliceSlider from '@/components/review/SliceSlider';
+import { tone } from '@/lib/noduleTone';
 
 const btn = 'h-7 px-2.5 rounded text-xs border border-neutral-700 text-neutral-300 hover:bg-neutral-800 disabled:opacity-35 disabled:hover:bg-transparent flex items-center gap-1.5';
 const on = 'bg-teal-400 text-teal-950 border-teal-400 hover:bg-teal-300';
@@ -105,13 +106,13 @@ export default function ViewerPane(p) {
           onStep={step} onImageClick={onImageClick} onDrag={onDrag} onDragEnd={onDragEnd} cursor={mode === 'erase' ? 'none' : mode ? 'crosshair' : 'default'}
           strokeMode={strokeMode} onStrokeEnd={onStrokeEnd} focus={focus}>
           {({ scale, startDrag, stroke, hover, toImg }) => (
-            <Overlay shapes={shapes} selId={sel?.id} draft={draft} isKey={isKey} editable={editable && !mode} scale={scale}
+            <Overlay sp={sp} shapes={shapes} selId={sel?.id} draft={draft} isKey={isKey} editable={editable && !mode} scale={scale}
               startDrag={startDrag} onSelect={onSelect} clicks={clicks} interactive={!mode} tool={mode} stroke={stroke} hover={hover} brushPx={brushPx} points={points} toImg={toImg} />
           )}
         </Viewer>
         </div>
         <SliceSlider z={z} n={n} onChange={setZ}
-          ticks={nodules.filter((x) => x.key_slice_z != null && (showRejected || x.status !== 'Rejected')).map((x) => ({ id: x.id, z: x.key_slice_z, label: x.nodule_label, sel: x.id === sel?.id }))} />
+          ticks={nodules.filter((x) => x.key_slice_z != null && (showRejected || x.status !== 'Rejected')).map((x) => ({ id: x.id, z: x.key_slice_z, label: x.nodule_label, color: tone(x, sel?.id) }))} />
       </div>
     </div>
   );

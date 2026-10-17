@@ -74,7 +74,7 @@ export default function NodulePanel(p) {
         ) : (
           <>
             {(sel || selId === CENTRAL) && !listView ? (
-              <NoduleChips nodules={nodules} selId={selId} onSelect={onSelect} central={central} onList={() => setListView(true)} />
+              <NoduleChips nodules={nodules} selId={selId} onSelect={onSelect} central={central} onList={() => setListView(true)} priorTimepoint={prior?.priorScan?.timepoint} />
             ) : (
               <div className="shrink-0 bg-white border-b border-slate-200">
                 {(sel || selId === CENTRAL) && <button onClick={() => setListView(false)} className="w-full px-3 py-1 text-xs text-teal-700 hover:bg-teal-50 text-right">Compact view</button>}
@@ -117,7 +117,7 @@ export default function NodulePanel(p) {
                 ) : (
                   <div className="h-10 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-center justify-center gap-1.5"><CircleCheck className="w-4 h-4" />Worklist done</div>
                 )}
-                <button onClick={next.done} className="h-10 rounded-md border border-slate-300 bg-white text-sm font-medium hover:bg-slate-100 flex items-center justify-center gap-1"><ArrowLeft className="w-4 h-4" />Done, back to worklist</button>
+                <button onClick={next.done} className="order-first h-10 rounded-md border border-slate-300 bg-white text-sm font-medium hover:bg-slate-100 flex items-center justify-center gap-1"><ArrowLeft className="w-4 h-4" />Done, back to worklist</button>
               </div>
             )}
             {isReviewer && next && !next.scan && <div className="text-xs text-slate-500">All scans of <span className="font-mono">{scan.patient_id}</span> approved.</div>}

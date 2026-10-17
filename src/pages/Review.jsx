@@ -488,7 +488,7 @@ function ReviewScan() {
           waitForPrior={waitForPrior ? { prior: priorScanNow, open: () => nav(`/review/${priorScanNow.id}`), goOn: () => setForceStart(true) } : null}
           central={{ done: centralDone, by: scan.central_checked_by_initials, at: scan.central_checked_at, onCheck: () => checkCentral(true), onUndo: () => checkCentral(false), onMediastinal: hasMed ? () => setWin('mediastinal') : null }}
           onRejectClick={() => setRejectOpen(true)} onReject={reject} onOpenPrior={setPriorView} onNext={next} onApprove={approve} onReopen={reopen}
-          prior={{ base, priorScan: priorQ.data?.scan, priorNodules }}
+          prior={{ base, priorScan: priorQ.data?.scan, priorNodules, scan }}
           formProps={{
             priorLabels: priorNodules.map((p) => p.nodule_label), aiSuggest, onSave: save, span, z, goSlice: setZ,
             onConfirm: () => {

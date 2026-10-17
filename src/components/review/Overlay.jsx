@@ -1,9 +1,11 @@
 import { uncertainty } from '@/lib/uncertainty';
+import { tone, STROKE } from '@/lib/noduleTone';
+import { lenMm } from '@/lib/geometry';
 
 const pts = (p) => p.map((q) => q.join(',')).join(' ');
 const AXES = ['long_axis_px', 'short_axis_px'];
 
-export default function Overlay({ shapes, selId, draft, isKey, editable, scale, startDrag, onSelect, clicks, interactive, tool, stroke, hover, brushPx, points, toImg }) {
+export default function Overlay({ sp, shapes, selId, draft, isKey, editable, scale, startDrag, onSelect, clicks, interactive, tool, stroke, hover, brushPx, points, toImg }) {
   // Line widths in screen pixels at any zoom (vector-effect ignores the viewer's CSS zoom transform).
   const sw = (w) => w / (scale || 1);
   const r = 4 / scale, fs = 12 / scale;
@@ -13,7 +15,7 @@ export default function Overlay({ shapes, selId, draft, isKey, editable, scale, 
         const isSel = n.id === selId;
         return (
           <polygon key={n.id + i} points={pts(p)} fill={isSel ? (end ? 'rgba(94,234,212,0.25)' : 'rgba(94,234,212,0.07)') : 'transparent'}
-            stroke={isSel ? (end ? '#ffffff' : '#5eead4') : n.status === 'Rejected' ? '#f87171' : '#fbbf24'} strokeWidth={sw(isSel ? (end ? 3.5 : 2.5) : 1)}
+            stroke={isSel && end ? '#ffffff' : STROKE[tone(n, selId)]} strokeWidth={sw(isSel ? (end ? 3.5 : 2.5) : 1)}
             strokeDasharray={n.status === 'Rejected' ? `${sw(4)} ${sw(3)}` : filled ? `${sw(2)} ${sw(3)}` : undefined}
             style={{ cursor: interactive ? 'pointer' : undefined, pointerEvents: interactive ? 'all' : 'none' }}
             onClick={(e) => { if (!interactive) return; e.stopPropagation(); onSelect(n); }} />
@@ -23,7 +25,15 @@ export default function Overlay({ shapes, selId, draft, isKey, editable, scale, 
         const p = polys.find((q) => q.length > 2) || (n.id === selId && isKey ? draft?.long_axis_px : null);
         if (!p) return null;
         const x = Math.max(...p.map((q) => q[0])), y = Math.min(...p.map((q) => q[1]));
-        return <text key={'t' + n.id} x={x + 5 / scale} y={y} fontSize={fs} fontFamily="JetBrains Mono, monospace" fill={n.id === selId ? '#5eead4' : '#fbbf24'} style={{ pointerEvents: 'none' }}>{n.nodule_label}{uncertainty(n).unsure ? ' ?' : ''}</text>;
+        return <text key={'t' + n.id} x={x + 5 / scale} y={y} fontSize={fs} fontFamily="JetBrains Mono, monospace" fill={STROKE[tone(n, selId)]} style={{ pointerEvents: 'none' }}>{n.nodule_label}{uncertainty(n).unsure && n.status === 'Pending' ? ' ?' : ''}</text>;
+      })}
+      {/* Caliper lengths on the lines themselves (follow the drag live). */}
+      {isKey && draft && AXES.map((k) => {
+        const s = draft[k];
+        if (s?.length !== 2) return null;
+        const mm = lenMm(s, sp || [1, 1]);
+        return <text key={'mm' + k} x={(s[0][0] + s[1][0]) / 2 + 4 / scale} y={(s[0][1] + s[1][1]) / 2 - 4 / scale} fontSize={fs} fontFamily="JetBrains Mono, monospace"
+          fill="#f0abfc" stroke="#000" strokeWidth={sw(3)} paintOrder="stroke" style={{ pointerEvents: 'none' }}>{mm == null ? '' : `${mm.toFixed(1)} mm`}</text>;
       })}
       {isKey && draft?.long_axis_px?.length === 2 && <line x1={draft.long_axis_px[0][0]} y1={draft.long_axis_px[0][1]} x2={draft.long_axis_px[1][0]} y2={draft.long_axis_px[1][1]} stroke="#f0abfc" strokeWidth={sw(1.5)} style={{ pointerEvents: 'none' }} />}
       {isKey && draft?.short_axis_px?.length === 2 && <line x1={draft.short_axis_px[0][0]} y1={draft.short_axis_px[0][1]} x2={draft.short_axis_px[1][0]} y2={draft.short_axis_px[1][1]} stroke="#f0abfc" strokeWidth={sw(1.5)} strokeDasharray={`${sw(5)} ${sw(4)}`} style={{ pointerEvents: 'none' }} />}
