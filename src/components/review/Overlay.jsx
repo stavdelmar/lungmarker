@@ -1,5 +1,5 @@
 import { uncertainty } from '@/lib/uncertainty';
-import { tone, STROKE } from '@/lib/noduleTone';
+import { tone, STROKE, outlineStyle } from '@/lib/noduleTone';
 import { calipers } from '@/lib/calipers';
 
 const pts = (p) => p.map((q) => q.join(',')).join(' ');
@@ -13,12 +13,16 @@ export default function Overlay({ sp, shapes, selId, draft, isKey, editable, sca
     <g>
       {shapes.map(({ n, polys, filled, end }) => polys.filter((p) => p.length > 2).map((p, i) => {
         const isSel = n.id === selId;
+        const st = outlineStyle(n, { selected: isSel, end });
+        const dash = st.dashed ? `${sw(4)} ${sw(3)}` : filled ? `${sw(2)} ${sw(3)}` : undefined;
         return (
-          <polygon key={n.id + i} points={pts(p)} fill={isSel ? (end ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.06)') : 'transparent'}
-            stroke={isSel && end ? '#ffffff' : STROKE[tone(n)]} strokeWidth={sw(isSel ? (end ? 3.5 : 3) : 1)} strokeOpacity={isSel ? 1 : 0.65}
-            style={{ filter: isSel ? 'brightness(1.25)' : undefined, cursor: interactive ? 'pointer' : undefined, pointerEvents: interactive ? 'all' : 'none' }}
-            strokeDasharray={n.status === 'Rejected' ? `${sw(4)} ${sw(3)}` : filled ? `${sw(2)} ${sw(3)}` : undefined}
-            onClick={(e) => { if (!interactive) return; e.stopPropagation(); onSelect(n); }} />
+          <g key={n.id + i} data-outline={n.nodule_label} data-tone={st.tone} data-selected={isSel ? 'yes' : 'no'}>
+            <polygon points={pts(p)} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth={sw(st.underlay)} strokeDasharray={dash} style={{ pointerEvents: 'none' }} />
+            <polygon points={pts(p)} fill={isSel ? (end ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.05)') : 'transparent'}
+              stroke={st.stroke} strokeWidth={sw(st.width)} strokeDasharray={dash}
+              style={{ filter: st.brighten ? 'brightness(1.3) saturate(1.2)' : undefined, cursor: interactive ? 'pointer' : undefined, pointerEvents: interactive ? 'all' : 'none' }}
+              onClick={(e) => { if (!interactive) return; e.stopPropagation(); onSelect(n); }} />
+          </g>
         );
       }))}
       {shapes.map(({ n, polys }) => {

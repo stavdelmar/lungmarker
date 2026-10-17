@@ -3,7 +3,7 @@ import { useRef } from 'react';
 // Same colour rule as chips and image outlines (see lib/noduleTone).
 // Colour = state only; the selected nodule's mark is longer and thicker (same colour). Rejected = red dashed line
 // (no fill), shown only with "Show rejected". Kept separate from the size classes so they never conflict.
-const FILL = { pending: 'bg-slate-400', accepted: 'bg-emerald-400', unsure: 'bg-amber-400' };
+const FILL = { pending: 'bg-slate-500', accepted: 'bg-emerald-400', unsure: 'bg-amber-400' };
 
 export default function SliceSlider({ z, n, ticks, onChange, range }) {
   const ref = useRef();
