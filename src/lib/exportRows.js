@@ -48,6 +48,11 @@ const v1 = (v) => (v == null || v === '' ? '–' : Number(v).toFixed(1));
 // One "AI draft" row per exported nodule (what the AI proposed, before any edit), then every change in time order.
 // How each exported nodule was reviewed (was in Notes; Notes is now Daniel's text only).
 export function reviewResult(n, events) {
+  if (n.status === 'Rejected') {
+    const why = n.reject_reason ? `: ${n.reject_reason}` : '';
+    if (isNotFound(n)) return /^Matched to /.test(n.reject_reason || '') ? `Prior ${n.prior_label} matched in this scan (${n.reject_reason.replace('Matched to ', '')})` : `Prior ${n.prior_label} marked present in this scan ("It's here")`;
+    return n.source === 'AI' ? `Rejected${why}` : `Added by reviewer; rejected${why}`;
+  }
   if (isNotFound(n)) return `Prior ${n.prior_label} confirmed not found in this scan`;
   if (n.source !== 'AI') return 'Added by reviewer';
   const edited = [...new Set(events.filter((ev) => ev.nodule === n.id && FIELD_NAMES[ev.field]).map((ev) => FIELD_NAMES[ev.field]))];
@@ -57,12 +62,15 @@ export function reviewResult(n, events) {
 export function trailRows(scans, events, nodules = []) {
   const sMap = Object.fromEntries(scans.map((s) => [s.id, s]));
   const head = (s, label) => [e(s.patient_id), d10(s.scan_date), e(s.timepoint), e(label)];
-  const drafts = nodules.filter((n) => sMap[n.scan] && exportable(n)).sort((a, b) => sortKey(sMap[a.scan], a).localeCompare(sortKey(sMap[b.scan], b))).map((n) => {
+  // exported rows + rejected findings (an AI draft that was rejected stays visible in the trail, not in Measurements)
+  const drafts = nodules.filter((n) => sMap[n.scan] && (exportable(n) || n.status === 'Rejected')).sort((a, b) => sortKey(sMap[a.scan], a).localeCompare(sortKey(sMap[b.scan], b))).map((n) => {
     const s = sMap[n.scan], a = n.ai_draft || {};
     const label = isNotFound(n) ? `prior ${n.prior_label}` : n.nodule_label;
     const result = [...head(s, label), 'Review result', null, null, reviewResult(n, events), e(s.approved_by_initials), ts(s.approved_at)];
     if (isNotFound(n)) {
-      const why = n.ai_draft?.from_engine ? `prior ${n.prior_label} not found in this scan (engine matching)` : `prior ${n.prior_label} was added by hand; the AI cannot match it`;
+      const why = n.ai_draft?.from_engine ? `prior ${n.prior_label} not found in this scan (engine matching)`
+        : n.ai_draft?.unmatched ? `prior ${n.prior_label} was not matched by any nodule in this scan (reviewer's matches)`
+          : `prior ${n.prior_label} was added by hand; the AI cannot match it`;
       return [[...head(s, label), 'AI draft', why, null, null, `AI engine ${s.engine_version || ''}`.trim(), ts(n.created_date)], result];
     }
     if (n.source !== 'AI') return [[...head(s, n.nodule_label), 'AI draft', 'none (added by reviewer)', null, null, e(s.engine_version) ? `AI engine ${s.engine_version}` : 'AI engine', ts(n.created_date)], result];

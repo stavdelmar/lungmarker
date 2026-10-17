@@ -71,11 +71,12 @@ export async function runScenario() {
     const scans = (await Scan.filter({ review_status: 'Approved' })).items;
     const nodules = (await Nodule.filter({ scan: { $in: scans.map((x) => x.id) }, status: 'Accepted' })).items;
     const events = (await EditEvent.filter({ scan: { $in: scans.map((x) => x.id) } }, { sort: 'edited_at' })).items;
-    const sel = selectForExport({ scans, nodules, events, onlyPending: true });
+    const rejected = (await Nodule.filter({ scan: { $in: scans.map((x) => x.id) }, status: 'Rejected' })).items;
+    const sel = selectForExport({ scans, nodules, rejected, events, onlyPending: true });
     const rows = measurementRows(sel.scans, sel.nodules, sel.events);
     const wbDay = buildWorkbook(XLSX, { ...sel, initials: 'DR', date: `2026-10-${day}` });
     const readme = XLSX.utils.sheet_to_json(wbDay.Sheets['Read me'], { header: 1 }).map((r) => r[0]).filter(Boolean).slice(1);
-    await markExported(sel.nodules, `2026-10-${day}T18:00:00.000Z`);
+    await markExported([...sel.nodules, ...sel.rejected], `2026-10-${day}T18:00:00.000Z`);
     daily.push({ day: `Oct ${day}`, rows: rows.map((r) => `${r[2]} ${r[5] ?? `(${r[14]})`}`), readme });
   };
   await exportPending(15);
@@ -87,6 +88,7 @@ export async function runScenario() {
     finding({ finding_id: 'F1', lobe: 'RUL', type_guess: 'Part-solid', key_slice_z: 150, key_slice_number: 151, long_axis_mm: 14.6, short_axis_mm: 10.8, volume_mm3: 1214, solid_component_mm: 8.2, cx: 305, cy: 210,
       match: { prior_scan_id: 'RIDER-TEST_test', prior_finding_id: 'F1', distance_mm: 3.1, confidence: 0.91, set_by: 'ai' } }),
     finding({ finding_id: 'F2', lobe: 'RML', type_guess: 'Solid', key_slice_z: 175, key_slice_number: 176, long_axis_mm: 4.4, short_axis_mm: 4.0, volume_mm3: 38, solid_component_mm: null, cx: 260, cy: 300 }),
+    finding({ finding_id: 'F3', lobe: 'LUL', type_guess: 'Solid', key_slice_z: 200, key_slice_number: 201, long_axis_mm: 5.6, short_axis_mm: 4.1, volume_mm3: 52, solid_component_mm: null, cx: 200, cy: 150 }),
   ], prior);
   // The engine did not find prior F2 (= Baseline N2) on the follow-up → match_summary.not_found_in_current = ['F2'].
   // Baseline N4 was added by hand (the engine can't match it), so it is asked about too. N3 was rejected → not asked.
@@ -108,6 +110,8 @@ export async function runScenario() {
   await save(fu, 'N2', { match_to_prior: 'N/A' });
   await save(fu, 'N2', { notes: 'New since prior, faint' });
   await save(fu, 'N2', { status: 'Accepted' });
+  // N3: Daniel rejects the AI's third finding (a vessel seen end-on) → not in Measurements, but in the Edit trail.
+  await save(fu, 'N3', { status: 'Rejected', reject_reason: 'Vessel' });
   await markCentralChecked(fu, me);
   await approveScan(fu, 1500, me, 1860); // 25:00 active, 31:00 total
   // Day 2: export again (default "only new"): should hold only the follow-up rows.
@@ -123,6 +127,7 @@ export async function runScenario() {
   const ids = scans.map((s) => s.id);
   const nodules = (await Nodule.filter({ scan: { $in: ids }, status: 'Accepted' }, { sort: 'nodule_label' })).items;
   const events = (await EditEvent.filter({ scan: { $in: ids } }, { sort: 'edited_at' })).items;
-  const wb = buildWorkbook(XLSX, { scans, nodules, events, initials: 'DR', date: '2026-10-15' });
+  const rejectedAll = (await Nodule.filter({ scan: { $in: ids }, status: 'Rejected' })).items.map((n) => ({ ...n, exported_at: null, changed_after_export: false }));
+  const wb = buildWorkbook(XLSX, { ...selectForExport({ scans, nodules, rejected: rejectedAll, events, onlyPending: false }), initials: 'DR', date: '2026-10-15' });
   return { wb, afterInit, notFoundAfterInit, daily, all: { scans, nodules: (await Nodule.filter({})).items } };
 }

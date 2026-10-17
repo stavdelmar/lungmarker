@@ -22,7 +22,8 @@ export default function NotFoundCard({ n, locked, prior, onConfirm, onHere, onRe
             <p className="mt-1 text-slate-700">
               On the prior scan, {n.prior_label} was in {n.lobe || 'an unknown lobe'}
               {a.prior_long != null && <>, <span className="font-mono">{fmtMaybe(a.prior_long)} × {fmtMaybe(a.prior_short)}</span> mm</>}.{' '}
-              {a.from_engine ? 'The AI did not find it on this scan.' : 'It was added by hand on the prior scan, so the AI cannot look for it.'}
+              {a.unmatched ? 'No nodule in this scan is matched to it (your matches differ from the AI\'s suggestion, or the matching nodule was rejected).'
+                : a.from_engine ? 'The AI did not find it on this scan.' : 'It was added by hand on the prior scan, so the AI cannot look for it.'}
             </p>
             {n.status === 'Accepted' && <p className="mt-1 font-medium text-slate-800">Confirmed not found. Exported with Match to prior = "Not found".</p>}
             {n.status === 'Rejected' && <p className="mt-1 font-medium text-slate-800">{n.reject_reason?.startsWith('Matched to') ? `${n.reject_reason} on this scan.` : 'Marked as present on this scan.'}</p>}

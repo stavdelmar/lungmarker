@@ -30,7 +30,7 @@ export function timeZoneLabel(at = new Date()) {
 
 // Builds the 3-sheet export workbook. Used by the Export page and by tests/export.
 // nodules = the Accepted nodules of the selected (approved) scans.
-export function buildWorkbook(XLSX, { scans, nodules, events: allEvents, initials, date }) {
+export function buildWorkbook(XLSX, { scans, nodules, rejected = [], events: allEvents, initials, date }) {
   const events = liveEvents(scans, allEvents); // a scan reset for re-import starts its trail again
   const meas = measurementRows(scans, nodules, events);
   const ws = XLSX.utils.aoa_to_sheet([MEAS_HEADERS, ...meas]);
@@ -47,7 +47,7 @@ export function buildWorkbook(XLSX, { scans, nodules, events: allEvents, initial
   ]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Measurements');
-  const trail = trailRows(scans, events, nodules);
+  const trail = trailRows(scans, events, [...nodules, ...rejected]); // rejected findings: trail only
   const wsTrail = XLSX.utils.aoa_to_sheet([TRAIL_HEADERS, ...trail]);
   datesToExcel(XLSX, wsTrail, trail.length);
   dateTimesToExcel(XLSX, wsTrail, trail.length, TRAIL_HEADERS.length - 1);

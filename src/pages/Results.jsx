@@ -63,12 +63,17 @@ export default function Results() {
   const exportExcel = async () => {
     setBusy(true); setExportMsg('');
     try {
-      const events = await fetchAll(EditEvent, { scan: { $in: [...new Set(toExport.map((n) => n.scan))] } }, 'edited_at');
-      const sel = selectForExport({ scans, nodules: toExport, events, onlyPending: false });
+      const scanIds = [...new Set(toExport.map((n) => n.scan))];
+      const events = await fetchAll(EditEvent, { scan: { $in: scanIds } }, 'edited_at');
+      // Rejected findings of these scans go into the Edit trail (AI draft + "Rejected: reason"), never into Measurements.
+      // Reviewers: each one once (tracked like rows). Viewers (Naomi): always all of them (a plain copy, nothing tracked).
+      const rejected = (await fetchAll(Nodule, { scan: { $in: scanIds }, status: 'Rejected' }, 'nodule_label'))
+        .map((n) => (me.isReviewer ? n : { ...n, exported_at: null, changed_after_export: false }));
+      const sel = selectForExport({ scans, nodules: toExport, rejected, events, onlyPending: false });
       const wb = buildWorkbook(XLSX, { ...sel, initials: me.initials, date: today() });
       XLSX.writeFile(wb, `lungmarker_export_${today()}.xlsx`);
       if (me.isReviewer) {
-        await markExported(sel.nodules);
+        await markExported([...sel.nodules, ...sel.rejected]);
         setSelected((cur) => { const s2 = new Set(cur); sel.nodules.forEach((n) => s2.delete(n.id)); return s2; });
         qc.invalidateQueries({ queryKey: ['resultNodules'] });
       }

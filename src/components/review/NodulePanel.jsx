@@ -1,8 +1,8 @@
-import { Plus, Check, X, ChevronRight, Lock, ScanSearch, CircleCheck, Circle, LogOut, ArrowLeft, Info } from 'lucide-react';
+import { Plus, Check, ChevronRight, Lock, ScanSearch, CircleCheck, LogOut, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import NoduleChips from '@/components/review/NoduleChips';
-import NoduleList, { DoubtPills } from '@/components/review/NoduleList';
+import NoduleList from '@/components/review/NoduleList';
 import NoduleSteps from '@/components/review/NoduleSteps';
 import NoduleHeader from '@/components/review/NoduleHeader';
 import NotFoundCard from '@/components/review/NotFoundCard';
@@ -41,7 +41,7 @@ function CentralDetail({ central, locked, onAdd }) {
 
 export default function NodulePanel(p) {
   const { scan, nodules, selId, sel, onSelect, locked, isReviewer, onAdd, adding, formProps, prior, followup, canAccept, under4, onAccept, onRejectClick, onNext, onReject, onOpenPrior,
-    checks, onApprove, onReopen, central, notFound, next, waitForPrior, onSaveExit, unconfirmed = [] } = p;
+    checks, onApprove, onReopen, central, notFound, next, waitForPrior, onSaveExit, unconfirmed = [], onAccountPrior } = p;
   const approved = scan.review_status === 'Approved';
   const [listView, setListView] = useState(false);
   return (
@@ -116,7 +116,9 @@ export default function NodulePanel(p) {
           <div className="flex items-center gap-2 text-xs">
             <span className="flex-1 min-w-0 truncate">
               {checks.ok ? <span className="text-emerald-700">All decided · central checked</span> : <>
-                {!checks.nodulesOk && <button className="text-amber-700 hover:underline" onClick={() => checks.firstOpen && onSelect(checks.firstOpen)}>{checks.total - checks.decided} not decided</button>}
+                {/* every reason at once ("1 not decided yet · N3: no lobe · prior N1 not matched or confirmed not found"); click → first open item */}
+                {!checks.nodulesOk && <button className="text-amber-700 hover:underline" title={checks.why}
+                  onClick={() => (checks.firstOpen ? onSelect(checks.firstOpen) : checks.unaccounted?.[0] && onAccountPrior?.(checks.unaccounted[0]))}>{checks.why}</button>}
                 {!checks.nodulesOk && !central.done && ' · '}
                 {!central.done && <button className="text-amber-700 hover:underline" onClick={() => onSelect({ id: CENTRAL })}>central not checked</button>}
               </>}
