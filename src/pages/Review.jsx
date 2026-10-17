@@ -11,7 +11,7 @@ import { initNodules, initNotFound, notFoundItemFor } from '@/lib/initNodules';
 import { priorOf, isApproved, nextScanForPatient, nextPatient } from '@/lib/patients';
 import { fetchAll } from '@/lib/data';
 import { saveNodule, logEvent, approveScan, markCentralChecked } from '@/lib/edits';
-import { lenMm, meanOf, findingPatch, sliceStepMm, volumeFromContours, sliceContour, allSliceContours, slicePatch, drawnSlices, interpolateSlices, handVolumeReady } from '@/lib/geometry';
+import { lenMm, meanOf, findingPatch, sliceStepMm, volumeFromContours, sliceContour, allSliceContours, slicePatch, drawnSlices, interpolateSlices, handVolumeReady, outlinedSlices } from '@/lib/geometry';
 import { brushEdit, lassoToPoly } from '@/lib/maskEdit';
 import { MIN_LONG_AXIS_MM } from '@/lib/exportRows';
 import { notFoundNote } from '@/lib/uncertainty';
@@ -158,6 +158,15 @@ function ReviewScan() {
   };
 
   const findingsById = useMemo(() => Object.fromEntries((findQ.data?.findings || []).map((f) => [f.finding_id, f])), [findQ.data]);
+  // First and last slice with an outline of the selected nodule (display only; volume untouched).
+  const span = useMemo(() => {
+    if (!sel || sel.kind === 'prior_not_found') return null;
+    const zs = outlinedSlices(sel, findingsById[sel.engine_finding_id]?.contours, meta?.pixel_spacing_mm || [1, 1]);
+    if (!zs.length) return null;
+    const first = Math.min(...zs), last = Math.max(...zs);
+    const num = (zz) => meta?.slices?.find((s) => s.z === zz)?.slice_number ?? zz + 1;
+    return { first, last, firstNum: num(first), lastNum: num(last) };
+  }, [sel, findingsById, meta]);
   const shapes = useMemo(() => nodules.filter((n) => n.kind !== 'prior_not_found' && (showRejected || n.status !== 'Rejected')).map((n) => {
     let polys = [];
     if (z === n.key_slice_z) polys = [(n.id === selId ? draft?.key_contour_px : n.key_contour_px) || []];
@@ -166,7 +175,7 @@ function ReviewScan() {
       return { n, polys: contours[String(z)] || [], filled: filled.has(z) };
     } else polys = [sliceContour(n, z, findingsById[n.engine_finding_id]?.contours)];
     return { n, polys };
-  }), [nodules, showRejected, z, selId, draft, findingsById, meta]);
+  }).map((s) => (s.n.id === selId && span && (z === span.first || z === span.last) ? { ...s, end: true } : s)), [nodules, showRejected, z, selId, draft, findingsById, meta, span]);
 
   const onDrag = (h, pt) => setDraft((d) => {
     const key = h.kind === 'contour' ? 'key_contour_px' : h.kind;
@@ -460,7 +469,7 @@ function ReviewScan() {
           onRejectClick={() => setRejectOpen(true)} onReject={reject} onOpenPrior={setPriorView} onNext={next} onApprove={approve} onReopen={reopen}
           prior={{ base, priorScan: priorQ.data?.scan, priorNodules }}
           formProps={{
-            priorLabels: priorNodules.map((p) => p.nodule_label), aiSuggest, onSave: save,
+            priorLabels: priorNodules.map((p) => p.nodule_label), aiSuggest, onSave: save, span, z, goSlice: setZ,
             onConfirm: () => {
               if (sel.source !== 'AI' && !handVolumeReady(drawnSlices(sel))) { setNotice(`To record a volume for ${sel.nodule_label}, outline it (D) on its top, middle and bottom slices; the slices in between are filled in. Without that, leave the outline unconfirmed: Volume stays empty.`); return; }
               const vol = sel.volume_mm3 ?? volumeFromContours(allSliceContours(sel, contoursOf(sel), sp), sp, dz);

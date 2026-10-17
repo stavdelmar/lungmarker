@@ -9,11 +9,11 @@ export default function Overlay({ shapes, selId, draft, isKey, editable, scale, 
   const r = 4 / scale, fs = 12 / scale;
   return (
     <g>
-      {shapes.map(({ n, polys, filled }) => polys.filter((p) => p.length > 2).map((p, i) => {
+      {shapes.map(({ n, polys, filled, end }) => polys.filter((p) => p.length > 2).map((p, i) => {
         const isSel = n.id === selId;
         return (
-          <polygon key={n.id + i} points={pts(p)} fill={isSel ? 'rgba(94,234,212,0.07)' : 'transparent'}
-            stroke={isSel ? '#5eead4' : n.status === 'Rejected' ? '#f87171' : '#fbbf24'} strokeWidth={sw(isSel ? 2.5 : 1)}
+          <polygon key={n.id + i} points={pts(p)} fill={isSel ? (end ? 'rgba(94,234,212,0.25)' : 'rgba(94,234,212,0.07)') : 'transparent'}
+            stroke={isSel ? (end ? '#ffffff' : '#5eead4') : n.status === 'Rejected' ? '#f87171' : '#fbbf24'} strokeWidth={sw(isSel ? (end ? 3.5 : 2.5) : 1)}
             strokeDasharray={n.status === 'Rejected' ? `${sw(4)} ${sw(3)}` : filled ? `${sw(2)} ${sw(3)}` : undefined}
             style={{ cursor: interactive ? 'pointer' : undefined, pointerEvents: interactive ? 'all' : 'none' }}
             onClick={(e) => { if (!interactive) return; e.stopPropagation(); onSelect(n); }} />

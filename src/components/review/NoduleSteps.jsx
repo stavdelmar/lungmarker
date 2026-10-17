@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Check, X, ChevronRight } from 'lucide-react';
 import Step from '@/components/review/Step';
+import OutlineEnds from '@/components/review/OutlineEnds';
 import MatchCompare from '@/components/review/MatchCompare';
 import { matchWarnings } from '@/lib/matchChecks';
 import { DoubtPills } from '@/components/review/NoduleList';
@@ -60,6 +61,7 @@ export default function NoduleSteps({ sel, nodules, locked, followup, canAccept,
           </div>
         )}
         <p className="text-[11.5px] text-slate-500">Edit the outline on the image (Erase E · Draw D), then confirm it.</p>
+        <OutlineEnds span={formProps.span} z={formProps.z} goSlice={formProps.goSlice} />
         <VolumeConfirm n={sel} locked={locked} onSave={formProps.onSave} onConfirm={formProps.onConfirm} />
         <Measurements n={sel} locked={locked} onSave={formProps.onSave} />
         {!locked && !accepted && <button onClick={() => advance(() => setMeasOk(true))} className="h-8 min-w-24 px-3 rounded-md bg-slate-900 text-white text-sm hover:bg-slate-800 flex items-center justify-center gap-1 whitespace-nowrap">Continue<ChevronRight className="w-4 h-4" /></button>}
