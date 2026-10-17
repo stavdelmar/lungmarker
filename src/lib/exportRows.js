@@ -1,3 +1,4 @@
+import { groupOutlineEdits } from '@/lib/trailGroup';
 export const MEAS_HEADERS = ['Patient ID', 'Scan date', 'Timepoint', 'Series #', 'Slice thickness (mm)', 'Nodule ID', 'Lobe', 'Slice #', 'Type', 'Long axis (mm)', 'Short axis (mm)', 'Mean diameter (mm)', 'Solid component (mm)', 'Volume (mm3)', 'Match to prior', 'Minutes on scan', 'Measured by', 'Notes'];
 export const TRAIL_HEADERS = ['Patient ID', 'Scan date', 'Timepoint', 'Nodule ID', 'Field', 'AI value', 'Previous value', 'New value', 'Changed by', 'Changed at'];
 export const ONE_DEC_COLS = [9, 10, 11, 12];
@@ -78,7 +79,8 @@ export function trailRows(scans, events, nodules = []) {
     const summary = [a.lobe, a.type, `slice ${a.key_slice_number ?? '–'}`, `long ${v1(a.long)} × short ${v1(a.short)} mm`, a.solid != null ? `solid ${v1(a.solid)} mm` : null, a.volume != null ? `volume ${Math.round(a.volume)} mm3` : null, `outline ${(a.contour || []).length} points`, match].filter(Boolean).join('; ');
     return [[...head(s, n.nodule_label), 'AI draft', summary, null, null, `AI engine ${s.engine_version || ''}`.trim(), ts(n.created_date)], result];
   }).flat();
-  const changes = events.filter((ev) => sMap[ev.scan]).sort((a, b) => (sortKey(sMap[a.scan], { nodule_label: '' }) + a.edited_at).localeCompare(sortKey(sMap[b.scan], { nodule_label: '' }) + b.edited_at)).map((ev) => {
+  // consecutive outline edits on one nodule (e.g. dragging points) → one row per field (see trailGroup.js)
+  const changes = groupOutlineEdits(events.filter((ev) => sMap[ev.scan])).sort((a, b) => (sortKey(sMap[a.scan], { nodule_label: '' }) + a.edited_at).localeCompare(sortKey(sMap[b.scan], { nodule_label: '' }) + b.edited_at)).map((ev) => {
     const s = sMap[ev.scan];
     return [...head(s, ev.nodule_label), ev.source ? `${ev.field} (${ev.source})` : e(ev.field), e(ev.ai_value), e(ev.old_value), e(ev.new_value), e(ev.edited_by_initials), ts(ev.edited_at)];
   });

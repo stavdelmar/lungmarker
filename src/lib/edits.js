@@ -66,7 +66,20 @@ export async function saveNodule(scan, given, patch, me, { source } = {}) {
 // Approve a scan: stamps who/when and the timer's minutes, and logs it in the edit trail.
 // Minutes on scan (exported) = total time open in Review until approval, like Daniel's own log
 // (whole process). Active minutes are kept alongside for the fair-comparison view in Results.
-export async function approveScan(scan, secs, me, totalSecs) {
+// Idempotent: a double click (or a second tab) must not approve twice or log "scan_approved" twice.
+// Calls for the same scan while one is running share it; an already-approved scan is left as it is.
+const approving = new Map();
+export function approveScan(scan, secs, me, totalSecs) {
+  if (approving.has(scan.id)) return approving.get(scan.id);
+  const run = doApprove(scan, secs, me, totalSecs).finally(() => approving.delete(scan.id));
+  approving.set(scan.id, run);
+  return run;
+}
+async function doApprove(scan, secs, me, totalSecs) {
+  let current = scan;
+  try { const fresh = await base44.entities.Scan.get(scan.id); if (fresh?.id) current = fresh; } catch { /* use the page's copy */ }
+  if (current.review_status === 'Approved') return null; // already approved: nothing to stamp or log
+  scan = { ...scan, ...current };
   const total = Math.max(totalSecs ?? 0, secs);
   const patch = { review_status: 'Approved', approved_by_email: me.user.email, approved_by_initials: me.initials, approved_at: new Date().toISOString(),
     active_seconds: secs, total_seconds: total, active_minutes: Math.ceil(secs / 60), minutes_on_scan: Math.ceil(total / 60) };
