@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Minus, Plus, Loader2, Eraser, PenLine, Undo2, MoreHorizontal, RotateCcw, Scissors, PlusCircle, MousePointerClick } from 'lucide-react';
 import { engine } from '@/api/engine';
-import { lenMm, fmtMaybe } from '@/components/review/viewerUtils';
+import { lenMm, fmtMaybe, boxOf } from '@/components/review/viewerUtils';
+import PriorPane from '@/components/review/PriorPane';
 import Viewer, { MAX_ZOOM } from '@/components/review/Viewer';
 import Overlay from '@/components/review/Overlay';
 import SliceSlider from '@/components/review/SliceSlider';
@@ -9,13 +10,6 @@ import SliceSlider from '@/components/review/SliceSlider';
 const btn = 'h-7 px-2.5 rounded text-xs border border-neutral-700 text-neutral-300 hover:bg-neutral-800 disabled:opacity-35 disabled:hover:bg-transparent flex items-center gap-1.5';
 const on = 'bg-teal-400 text-teal-950 border-teal-400 hover:bg-teal-300';
 
-// Bounding box of a nodule's key-slice outline (or its axes), in image pixels.
-function boxOf(n) {
-  const pts = [...(n?.key_contour_px || []), ...(n?.long_axis_px || []), ...(n?.short_axis_px || [])];
-  if (!pts.length) return null;
-  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
-}
 
 // Outline tools act on the image, so they live on the image toolbar: Erase (E), Draw (D), Undo; rarer ones under ⋯.
 function OutlineTools({ t }) {
@@ -51,7 +45,7 @@ function OutlineTools({ t }) {
 }
 
 export default function ViewerPane(p) {
-  const { meta, base, sid, z, step, setZ, win, setWin, nodules, shapes, sel, draft, editable, mode, clicks, onSelect, onImageClick, onDrag, onDragEnd, showRejected, setShowRejected, modeBar, busy, onStrokeEnd, brushPx, tools } = p;
+  const { meta, base, sid, z, step, setZ, win, setWin, nodules, shapes, sel, draft, editable, mode, clicks, onSelect, onImageClick, onDrag, onDragEnd, showRejected, setShowRejected, modeBar, busy, onStrokeEnd, brushPx, tools, priorView } = p;
   const strokeMode = mode === 'erase' || mode === 'draw';
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -61,7 +55,8 @@ export default function ViewerPane(p) {
   const isKey = !!sel && z === sel.key_slice_z;
   const fitView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
   const box = useMemo(() => boxOf(sel), [sel?.id]);
-  const focus = useMemo(() => (sel && box ? { id: sel.id, box } : null), [sel?.id, box]);
+  const split = !!priorView;
+  const focus = useMemo(() => (sel && box ? { id: `${sel.id}${split ? ':split' : ''}`, box } : null), [sel?.id, box, split]);
 
   useEffect(() => {
     const h = (e) => {
@@ -92,7 +87,8 @@ export default function ViewerPane(p) {
       </div>
       {modeBar}
       <div className="flex flex-1 min-h-0">
-        <div className="relative flex flex-1 min-w-0">
+        {priorView && <PriorPane {...priorView} sel={sel} z={z} step={step} />}
+        <div className={`relative flex flex-1 min-w-0 ${split ? 'border-l border-neutral-700' : ''}`}>
         {/* Corner read-out on the image, as in CT viewers: slice number, window, and the selected nodule's axes. */}
         <div className="absolute left-3 top-2 z-10 pointer-events-none font-mono text-[12px] leading-5 text-neutral-200 [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">
           <div>Slice #{sliceNo} <span className="text-neutral-400">({z + 1}/{n})</span></div>

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 const pts = (p) => p.map((q) => q.join(',')).join(' ');
 
 // Slice image + vector overlay, cropped around `focus` points.
-export default function CropView({ src, focus = [], shapes = [], className = '' }) {
+export default function CropView({ src, focus = [], shapes = [], className = '', half: fixedHalf }) {
   const [dim, setDim] = useState(null);
   useEffect(() => {
     setDim(null);
@@ -20,7 +20,7 @@ export default function CropView({ src, focus = [], shapes = [], className = '' 
   if (focus.length) {
     const xs = focus.map((p) => p[0]), ys = focus.map((p) => p[1]);
     const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-    const half = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) / 2 + 40;
+    const half = fixedHalf || Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) / 2 + 40;
     vb = `${cx - half} ${cy - half} ${half * 2} ${half * 2}`;
   }
   return (

@@ -1,15 +1,10 @@
 import { Plus, Check, X, ChevronRight, Lock, ScanSearch, CircleCheck, Circle, LogOut, ArrowLeft, Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import NoduleList, { DoubtPills } from '@/components/review/NoduleList';
-import { VolumeConfirm, Measurements, MatchToPrior, Notes } from '@/components/review/NoduleForm';
-import PriorBox from '@/components/review/PriorBox';
+import NoduleSteps from '@/components/review/NoduleSteps';
+import NoduleHeader from '@/components/review/NoduleHeader';
 import NotFoundCard from '@/components/review/NotFoundCard';
-import StatusBadge from '@/components/StatusBadge';
-import { uncertainty } from '@/lib/uncertainty';
 import { CENTRAL } from '@/lib/reviewChecks';
-
-const big = 'h-10 flex-1 rounded-md text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40';
-const step = 'text-[10.5px] uppercase tracking-wider text-slate-400 font-medium';
 
 // The central-areas item, shown where a nodule's fields normally are.
 function CentralDetail({ central, locked, onAdd }) {
@@ -41,70 +36,19 @@ function CentralDetail({ central, locked, onAdd }) {
   );
 }
 
-function NoduleDetail({ sel, locked, followup, canAccept, under4, onAccept, onRejectClick, onNext, formProps, prior }) {
-  const u = uncertainty(sel);
-  const blocked = !locked && !canAccept && (under4 || (followup && !sel.match_to_prior));
-  return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="font-mono text-lg font-semibold">{sel.nodule_label}</span>
-        <StatusBadge status={sel.status} />
-        <span className="text-xs text-slate-500">{sel.source}{sel.status === 'Rejected' && sel.reject_reason ? ` · ${sel.reject_reason}` : ''}</span>
-      </div>
-
-      {/* 1 · decide */}
-      {!locked && (
-        <div>
-          <div className="flex gap-2">
-            <button onClick={onAccept} disabled={!canAccept} title={under4 ? 'Long axis under 4 mm: not measured (Reject → Under 4 mm)' : followup && !sel.match_to_prior ? 'Choose Match to prior first' : 'Accept (A)'}
-              className={`${big} bg-emerald-600 text-white hover:bg-emerald-700 ${sel.status === 'Accepted' ? 'ring-2 ring-offset-1 ring-emerald-600' : ''}`}><Check className="w-4 h-4" />Accept <kbd className="text-[10px] opacity-70 font-normal">A</kbd></button>
-            <button onClick={onRejectClick} className={`${big} border-2 border-rose-200 text-rose-700 hover:bg-rose-50 ${sel.status === 'Rejected' ? 'bg-rose-50 border-rose-300' : 'bg-white'}`}><X className="w-4 h-4" />Reject <kbd className="text-[10px] opacity-70 font-normal">R</kbd></button>
-          </div>
-          {blocked && <p className="text-[11.5px] text-amber-700 mt-1.5">{under4 ? 'Long axis is under 4 mm, so it is not measured. Reject it as "Under 4 mm", or correct the size.' : 'Choose Match to prior (below) before accepting.'}</p>}
-        </div>
-      )}
-
-      {u.unsure && (
-        <div className="rounded-lg border-2 border-amber-400 bg-amber-50 p-3 space-y-1.5 text-[13px] text-amber-950">
-          <div className="flex flex-wrap gap-1.5"><DoubtPills n={sel} size="lg" /></div>
-          {u.lowConf && <p>The AI is less sure where this nodule's edge is. Check the outline before confirming it.</p>}
-          {u.vessel && <p>It may be a vessel seen end-on. Scroll a few slices up and down: a vessel continues as a tube and branches, a nodule ends.</p>}
-        </div>
-      )}
-
-      {followup && <MatchToPrior n={sel} locked={locked} priorLabels={formProps.priorLabels} aiSuggest={formProps.aiSuggest} onSave={formProps.onSave} />}
-
-      {/* 2 · outline: tools are on the image toolbar. 3 · confirm it */}
-      <div>
-        <div className={`${step} mb-1`}>Outline · edit it on the image (Erase E · Draw D), then confirm</div>
-        <VolumeConfirm n={sel} locked={locked} onSave={formProps.onSave} onConfirm={formProps.onConfirm} />
-      </div>
-
-      <div>
-        <div className={`${step} mb-1`}>Measurements</div>
-        <Measurements n={sel} locked={locked} onSave={formProps.onSave} />
-      </div>
-      <Notes n={sel} locked={locked} onSave={formProps.onSave} />
-      <div className="flex">
-        <button onClick={onNext} className="ml-auto h-8 px-3 rounded-md border border-slate-200 text-sm hover:bg-slate-50 flex items-center gap-1">Next <kbd className="text-[10px] opacity-60">N</kbd><ChevronRight className="w-4 h-4" /></button>
-      </div>
-      {followup && <PriorBox {...prior} chosen={sel.match_to_prior} suggested={formProps.aiSuggest?.label} />}
-    </div>
-  );
-}
 
 export default function NodulePanel(p) {
-  const { scan, nodules, selId, sel, onSelect, locked, isReviewer, onAdd, adding, formProps, prior, followup, canAccept, under4, onAccept, onRejectClick, onNext,
+  const { scan, nodules, selId, sel, onSelect, locked, isReviewer, onAdd, adding, formProps, prior, followup, canAccept, under4, onAccept, onRejectClick, onNext, onReject, onOpenPrior,
     checks, onApprove, onReopen, central, notFound, next, waitForPrior, onSaveExit, unconfirmed = [] } = p;
   const approved = scan.review_status === 'Approved';
   const line = 'w-full flex items-center gap-2 text-sm rounded px-1.5 py-1 hover:bg-white text-left';
   return (
-    <aside className="w-[35%] min-w-[420px] border-l border-slate-200 bg-white flex flex-col min-h-0">
-      <div className="h-10 shrink-0 flex items-center px-4 border-b border-slate-100">
+    <aside className="w-[35%] min-w-[420px] border-l border-slate-200 bg-slate-50 flex flex-col min-h-0">
+      <div className="h-10 shrink-0 flex items-center px-4 border-b border-slate-200 bg-white">
         <span className="text-[11px] uppercase tracking-wider text-slate-500">Nodules <span className="font-mono">({nodules.length})</span></span>
         {!locked && !waitForPrior && <button onClick={onAdd} className={`ml-auto text-xs flex items-center gap-1 px-2 h-7 rounded ${adding ? 'bg-teal-600 text-white' : 'text-teal-700 hover:bg-teal-50'}`}><Plus className="w-3.5 h-3.5" />Add nodule</button>}
       </div>
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
         {waitForPrior ? (
           <div className="m-4 rounded-lg border-2 border-amber-400 bg-amber-50 p-4 space-y-3 text-sm text-amber-950">
             <div className="font-semibold">The {waitForPrior.prior.timepoint} isn't approved yet</div>
@@ -117,14 +61,23 @@ export default function NodulePanel(p) {
           </div>
         ) : (
           <>
-            <div className="max-h-[42%] min-h-[96px] overflow-y-auto border-b border-slate-200"><NoduleList nodules={nodules} selId={selId} onSelect={onSelect} central={central} /></div>
-            {selId === CENTRAL && <CentralDetail central={central} locked={locked} onAdd={onAdd} />}
-            {sel && sel.kind === 'prior_not_found' && (
-              <div className="p-4"><NotFoundCard n={sel} locked={locked} prior={prior} onConfirm={notFound.onConfirm} onHere={notFound.onHere} onReopen={notFound.onReopen} /></div>
-            )}
-            {sel && sel.kind !== 'prior_not_found' && (
-              <NoduleDetail sel={sel} locked={locked} followup={followup} canAccept={canAccept} under4={under4} onAccept={onAccept} onRejectClick={onRejectClick} onNext={onNext} formProps={formProps} prior={prior} />
-            )}
+            <div className="shrink-0 h-48 mx-3 mt-3 rounded-lg border border-slate-200 bg-white overflow-y-auto shadow-sm">
+              <NoduleList nodules={nodules} selId={selId} onSelect={onSelect} central={central} />
+            </div>
+            <div className="flex-1 min-h-0 m-3 rounded-lg border border-slate-200 bg-white flex flex-col overflow-hidden shadow-sm">
+              {sel && <NoduleHeader sel={sel} nodules={nodules} onSelect={onSelect} />}
+              <div className="flex-1 overflow-y-auto">
+                {!sel && selId !== CENTRAL && <div className="p-4 text-sm text-slate-500">Select a nodule in the list.</div>}
+                {selId === CENTRAL && <CentralDetail central={central} locked={locked} onAdd={onAdd} />}
+                {sel && sel.kind === 'prior_not_found' && (
+                  <div className="p-4"><NotFoundCard n={sel} locked={locked} prior={prior} onConfirm={notFound.onConfirm} onHere={notFound.onHere} onReopen={notFound.onReopen} /></div>
+                )}
+                {sel && sel.kind !== 'prior_not_found' && (
+                  <NoduleSteps key={sel.id} sel={sel} nodules={nodules} locked={locked} followup={followup} canAccept={canAccept} under4={under4} onAccept={onAccept}
+                    onReject={onReject} onRejectClick={onRejectClick} onNext={onNext} formProps={formProps} prior={prior} onOpenPrior={onOpenPrior} />
+                )}
+              </div>
+            </div>
           </>
         )}
       </div>

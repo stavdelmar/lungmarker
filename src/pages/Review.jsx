@@ -80,6 +80,7 @@ function ReviewScan() {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [priorView, setPriorView] = useState(null); // prior nodule shown in the split view
   const draftRef = useRef(null);
   const sel = selId === CENTRAL ? null : nodules.find((n) => n.id === selId);
   const autoMed = useRef(false);
@@ -90,6 +91,7 @@ function ReviewScan() {
     const d = sel ? { key_contour_px: sel.key_contour_px || [], long_axis_px: sel.long_axis_px, short_axis_px: sel.short_axis_px } : null;
     draftRef.current = d; setDraft(d);
   }, [sel?.id, sel?.updated_date]);
+  useEffect(() => setPriorView(null), [selId]);
 
 
   // A follow-up starts only once its prior is approved: Match to prior and the "not found?" checks need the prior's
@@ -420,6 +422,7 @@ function ReviewScan() {
               sel={sel} draft={draft} editable={!locked} mode={mode} clicks={clicks} onSelect={select} onImageClick={onImageClick}
               onDrag={onDrag} onDragEnd={onDragEnd} showRejected={showRejected} setShowRejected={setShowRejected} modeBar={modeBar} busy={busy}
               onStrokeEnd={onStrokeEnd} brushPx={brushPx}
+              priorView={priorView && priorQ.data?.scan ? { base, priorScan: priorQ.data.scan, pn: priorView, onClose: () => setPriorView(null) } : null}
               tools={{
                 on: !locked && !!sel && !isNF, sel, refineOk: refineOk && !!meta, mode,
                 onErase: () => setMode(mode === 'erase' ? null : 'erase'),
@@ -440,7 +443,7 @@ function ReviewScan() {
           next={{ scan: nextForPatient, patient: nextPat, open: (s) => nav(`/review/${s.id}`), done: () => nav('/') }} checks={checks} unconfirmed={unconfirmedOutlines(nodules)} onSaveExit={saveExit}
           waitForPrior={waitForPrior ? { prior: priorScanNow, open: () => nav(`/review/${priorScanNow.id}`), goOn: () => setForceStart(true) } : null}
           central={{ done: centralDone, by: scan.central_checked_by_initials, at: scan.central_checked_at, onCheck: () => checkCentral(true), onUndo: () => checkCentral(false), onMediastinal: hasMed ? () => setWin('mediastinal') : null }}
-          onRejectClick={() => setRejectOpen(true)} onNext={next} onApprove={approve} onReopen={reopen}
+          onRejectClick={() => setRejectOpen(true)} onReject={reject} onOpenPrior={setPriorView} onNext={next} onApprove={approve} onReopen={reopen}
           prior={{ base, priorScan: priorQ.data?.scan, priorNodules }}
           formProps={{
             priorLabels: priorNodules.map((p) => p.nodule_label), aiSuggest, onSave: save,
