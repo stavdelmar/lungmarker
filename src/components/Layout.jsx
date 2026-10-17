@@ -16,7 +16,7 @@ export default function Layout() {
         For research use only. Not for clinical use.
       </div>
       <header className="h-12 flex items-center gap-8 px-6 bg-white border-b border-slate-200">
-        <div className="font-semibold tracking-tight text-[15px]">Lung<span className="text-teal-700">Marker</span> <span className="ml-1 px-1.5 py-0.5 rounded bg-slate-900 text-white text-[10px] font-semibold tracking-wider align-middle">HTO Lab</span> <span className="font-normal text-xs text-slate-500">· Harbor Thoracic Oncology Lab</span></div>
+        <div className="font-semibold tracking-tight text-[15px]">Lung<span className="text-teal-700">Marker</span> <span className="font-normal text-xs text-slate-500">· Harbor Thoracic Oncology Lab</span></div>
         <nav className="flex gap-1 text-sm">
           {links.map((l) => (
             <NavLink key={l.to} to={l.to} end={l.to === '/'}
