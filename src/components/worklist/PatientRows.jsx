@@ -9,7 +9,7 @@ const sub = 'text-left font-medium px-4 py-1.5 text-[10.5px] uppercase tracking-
 export default function PatientRows({ p, all, expanded, onToggle, onOpen, showMinutes }) {
   const Chev = expanded ? ChevronDown : ChevronRight;
   const go = () => (p.next ? onOpen(p.next) : onToggle());
-  const cols = showMinutes ? 6 : 5;
+  const cols = showMinutes ? 5 : 4;
   return (
     <>
       <tr onClick={go} className={`border-t border-slate-200 cursor-pointer ${p.status === 'Done' ? 'bg-slate-50/50 hover:bg-slate-50' : 'hover:bg-slate-50'}`}>
