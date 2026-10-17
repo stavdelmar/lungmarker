@@ -103,7 +103,7 @@ export default function NodulePanel(p) {
                 {next.scan ? (
                   <button onClick={() => next.open(next.scan)} className="h-10 rounded-md bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 flex items-center justify-center gap-1">Next scan for this patient<ChevronRight className="w-4 h-4" /></button>
                 ) : next.patient ? (
-                  <button onClick={() => next.open(next.patient.scan)} className="h-10 rounded-md bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 flex items-center justify-center gap-1">Next patient · <span className="font-mono">{next.patient.patient_id}</span><ChevronRight className="w-4 h-4" /></button>
+                  <button onClick={() => next.open(next.patient.scan)} className="h-10 rounded-md bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 flex items-center justify-center gap-1">Next patient<ChevronRight className="w-4 h-4" /></button>
                 ) : (
                   <div className="h-10 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-center justify-center gap-1.5"><CircleCheck className="w-4 h-4" />Worklist done</div>
                 )}
