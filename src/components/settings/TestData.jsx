@@ -6,10 +6,11 @@ import { engine } from '@/api/engine';
 import { useMe } from '@/hooks/useMe';
 import { fetchAll } from '@/lib/data';
 import { scanOrder } from '@/lib/patients';
-import { engineState, withLaterScans, resetScans } from '@/lib/reimport';
+import { engineState, withLaterScans, resetScans, removeDuplicates } from '@/lib/reimport';
+import { duplicateNodules } from '@/lib/initNodules';
 import StatusBadge from '@/components/StatusBadge';
 
-const { Scan } = base44.entities;
+const { Scan, Nodule } = base44.entities;
 const STATE = {
   same: ['matches engine', 'text-emerald-700'],
   changed: ['engine output changed', 'text-amber-700 font-medium'],
@@ -33,6 +34,24 @@ export default function TestData({ base }) {
   const affected = withLaterScans(scans.filter((s) => sel.has(s.id)), scans);
   const extra = affected.filter((s) => !sel.has(s.id));
   const approvedN = affected.filter((s) => s.review_status === 'Approved').length;
+  // Duplicate nodules (same AI finding created twice by the old first-opening setup), per scan.
+  const nodsQ = useQuery({ queryKey: ['allNodulesForDuplicates'], queryFn: () => fetchAll(Nodule, {}, 'scan') });
+  const dups = useMemo(() => {
+    const out = {};
+    for (const n of duplicateNodules(nodsQ.data || []).remove) (out[n.scan] ||= []).push(n.nodule_label || `prior ${n.prior_label}`);
+    return out;
+  }, [nodsQ.data]);
+  const dupScans = scans.filter((s) => dups[s.id]);
+  const dupCount = dupScans.reduce((k, s) => k + dups[s.id].length, 0);
+  const cleanDuplicates = async () => {
+    setBusy(true); setMsg('');
+    try {
+      const r = await removeDuplicates(dupScans, me);
+      setMsg(`Removed ${r.nodules} duplicate nodule${r.nodules === 1 ? '' : 's'} (${r.labels.join(' · ')}). The copy with review work on it was kept; logged in the edit trail.`);
+      qc.invalidateQueries();
+    } catch (e) { setMsg(`Clean-up failed: ${e.message}`); }
+    setBusy(false);
+  };
 
   const check = async () => {
     setChecking(true); setMsg('');
@@ -66,6 +85,13 @@ export default function TestData({ base }) {
         current engine output is used on the next opening. Later scans of the same patient are reset with it (they build on the prior's review).
         The edit trail itself is never deleted; exports only use rows from the reset on.
       </p>
+      {dupCount > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900">
+          <span><b>{dupCount} duplicate nodule{dupCount === 1 ? '' : 's'}</b> in {dupScans.length} scan{dupScans.length === 1 ? '' : 's'}: the same AI finding was created twice when the scan was first set up (fixed now).</span>
+          <button onClick={cleanDuplicates} disabled={busy} className="h-7 px-2.5 rounded-md bg-red-700 text-white font-medium disabled:opacity-50">Remove duplicates</button>
+          <span className="text-red-800/80">Keeps the copy you reviewed; nothing else changes.</span>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <button onClick={check} disabled={checking || !base} className="h-8 px-3 rounded-md border border-slate-300 hover:bg-slate-50 flex items-center gap-1.5 disabled:opacity-50">
           {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}Check against engine
@@ -89,7 +115,7 @@ export default function TestData({ base }) {
                 <td><input type="checkbox" checked={sel.has(s.id) || auto} disabled={auto} onChange={() => toggle(s.id)} className="accent-slate-900 w-4 h-4 align-middle" aria-label={`Select ${s.patient_id} ${s.timepoint}`} /></td>
                 <td className="py-1.5 font-mono">{s.patient_id}</td><td>{s.timepoint}{auto && <span className="ml-1.5 text-[10.5px] text-amber-800">(with its prior)</span>}</td>
                 <td><StatusBadge status={s.review_status || 'Not started'} /></td>
-                <td className={`text-xs ${st ? STATE[st][1] : 'text-slate-400'}`}>{st ? STATE[st][0] : 'not checked'}</td>
+                <td className={`text-xs ${st ? STATE[st][1] : 'text-slate-400'}`}>{st ? STATE[st][0] : 'not checked'}{dups[s.id] && <span className="ml-1.5 text-red-700 font-medium">· duplicates: {dups[s.id].join(', ')}</span>}</td>
                 <td className="text-xs font-mono text-slate-500">{s.reset_at ? new Date(s.reset_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
               </tr>
             );

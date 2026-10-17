@@ -45,7 +45,7 @@ function OutlineTools({ t }) {
 }
 
 export default function ViewerPane(p) {
-  const { meta, base, sid, z, step, setZ, win, setWin, nodules, shapes, sel, draft, editable, mode, clicks, onSelect, onImageClick, onDrag, onDragEnd, showRejected, setShowRejected, modeBar, busy, onStrokeEnd, brushPx, tools, priorView } = p;
+  const { meta, base, sid, z, step, setZ, win, setWin, nodules, shapes, sel, draft, editable, mode, clicks, onSelect, onImageClick, onDrag, onDragEnd, showRejected, setShowRejected, modeBar, busy, onStrokeEnd, brushPx, tools, priorView, points } = p;
   const strokeMode = mode === 'erase' || mode === 'draw';
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -96,12 +96,17 @@ export default function ViewerPane(p) {
           {sel && <div className="text-teal-300">{sel.nodule_label}{isKey ? '' : <span className="text-neutral-400"> · key slice #{meta.slices?.find((s) => s.z === sel.key_slice_z)?.slice_number ?? (sel.key_slice_z ?? 0) + 1}</span>}</div>}
           {sel && sel.kind !== 'prior_not_found' && <div className="text-fuchsia-300">{fmtMaybe(sel.long_axis_mm)} × {fmtMaybe(sel.short_axis_mm)} mm</div>}
         </div>
+        {points && isKey && (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 pointer-events-none rounded bg-black/60 px-2 py-1 text-[11px] text-neutral-300 whitespace-nowrap">
+            Drag a point to move it · click the outline to add one · Alt+click{points.selected != null ? ' or Backspace' : ''} to delete
+          </div>
+        )}
         <Viewer src={engine.sliceUrl(base, sid, win, z)} cols={meta.cols} rows={meta.rows} zoom={zoom} setZoom={setZoom} pan={pan} setPan={setPan}
           onStep={step} onImageClick={onImageClick} onDrag={onDrag} onDragEnd={onDragEnd} cursor={mode === 'erase' ? 'none' : mode ? 'crosshair' : 'default'}
           strokeMode={strokeMode} onStrokeEnd={onStrokeEnd} focus={focus}>
-          {({ scale, startDrag, stroke, hover }) => (
+          {({ scale, startDrag, stroke, hover, toImg }) => (
             <Overlay shapes={shapes} selId={sel?.id} draft={draft} isKey={isKey} editable={editable && !mode} scale={scale}
-              startDrag={startDrag} onSelect={onSelect} clicks={clicks} interactive={!mode} tool={mode} stroke={stroke} hover={hover} brushPx={brushPx} />
+              startDrag={startDrag} onSelect={onSelect} clicks={clicks} interactive={!mode} tool={mode} stroke={stroke} hover={hover} brushPx={brushPx} points={points} toImg={toImg} />
           )}
         </Viewer>
         </div>

@@ -69,6 +69,10 @@
       "type": "number",
       "description": "Active time at approval, rounded up (idle > idle_pause_seconds and hidden tab not counted). = exported Minutes on scan (Daniel, 17 Oct)"
     },
+    "setup_token": {
+      "type": "string",
+      "description": "Claim written by the tab that copies the AI draft in on first opening; only the last writer goes on (prevents duplicate nodules)"
+    },
     "total_minutes": {
       "type": "number",
       "description": "Time the scan was open, opening to approval, rounded up. Shown on screen and in the Edit trail as 'open', not exported as Minutes on scan"

@@ -118,7 +118,7 @@ export default function Viewer({ src, cols, rows, zoom, setZoom, pan, setPan, on
       <div className="absolute left-1/2 top-1/2" style={{ width: cols, height: rows, transform: `translate(-50%,-50%) translate(${pan.x}px,${pan.y}px) scale(${scale})` }}>
         <img src={src} width={cols} height={rows} draggable={false} onError={() => setErr(true)} onLoad={() => setErr(false)} className="block max-w-none" alt="CT slice" />
         <svg ref={svgRef} viewBox={`0 0 ${cols} ${rows}`} width={cols} height={rows} className="absolute inset-0 overflow-visible" onClick={click}>
-          {children({ scale, stroke, hover: strokeMode ? hover : null, startDrag: (h) => { dragRef.current = h; } })}
+          {children({ scale, stroke, hover: strokeMode ? hover : null, startDrag: (h) => { dragRef.current = h; }, toImg })}
         </svg>
       </div>
       {err && <div className="absolute inset-x-0 bottom-4 text-center text-xs text-neutral-400">Slice image unavailable from the AI engine.</div>}

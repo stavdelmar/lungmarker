@@ -5,6 +5,7 @@ import { base44 } from '@/api/base44Client';
 import { fetchAll } from '@/lib/data';
 import { tpRank } from '@/lib/patients';
 import { logEvent } from '@/lib/edits';
+import { duplicateNodules } from '@/lib/initNodules';
 
 const { Scan, Nodule } = base44.entities;
 
@@ -39,7 +40,7 @@ export function withLaterScans(targets, allScans) {
 export const RESET_FIELDS = {
   review_status: 'Not started', active_seconds: 0, total_seconds: 0, active_minutes: null, minutes_on_scan: null,
   approved_by_email: '', approved_by_initials: '', approved_at: null, central_checked_at: null, central_checked_by_initials: '',
-  resume_item_id: '', first_opened_at: null, exported_at: null, ai_fingerprint: '', ai_imported_at: null,
+  resume_item_id: '', first_opened_at: null, exported_at: null, ai_fingerprint: '', ai_imported_at: null, setup_token: '',
 };
 
 // Admin only (deleting nodules is admin-only in the entity rules). engineScans = scans.json entries, used to refresh
@@ -69,4 +70,19 @@ export async function resetScans(scans, me, { engineScans = [], reason = '' } = 
 export function liveEvents(scans, events) {
   const round = Object.fromEntries(scans.map((s) => [s.id, s.review_round || 0]));
   return events.filter((ev) => !(ev.scan in round) || (ev.review_round || 0) === round[ev.scan]);
+}
+
+// Admin only (deletes nodules). Removes duplicate copies of the same AI finding / prior "not found?" item that the
+// old first-opening setup could create twice (see setupScan). One trail row per cleaned scan.
+export async function removeDuplicates(scans, me) {
+  const out = { scans: 0, nodules: 0, labels: [] };
+  for (const s of scans) {
+    const { remove } = duplicateNodules(await fetchAll(Nodule, { scan: s.id }));
+    if (!remove.length) continue;
+    for (const n of remove) await Nodule.delete(n.id);
+    const labels = remove.map((n) => n.nodule_label || `prior ${n.prior_label}`).join(', ');
+    await logEvent(s, null, 'duplicates_removed', `${remove.length} duplicate${remove.length === 1 ? '' : 's'}`, `removed ${labels} (same AI finding created twice when the scan was first set up); the reviewed copy kept`, me);
+    out.scans += 1; out.nodules += remove.length; out.labels.push(`${s.patient_id} ${s.timepoint}: ${labels}`);
+  }
+  return out;
 }

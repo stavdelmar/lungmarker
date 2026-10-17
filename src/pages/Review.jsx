@@ -7,7 +7,8 @@ import { engine } from '@/api/engine';
 import { useMe } from '@/hooks/useMe';
 import { useSettings, useHealth } from '@/hooks/useAppData';
 import { useScanTimer } from '@/hooks/useScanTimer';
-import { initNodules, initNotFound, notFoundItemFor } from '@/lib/initNodules';
+import { setupScan, notFoundItemFor } from '@/lib/initNodules';
+import { insertPoint, deletePoint, MIN_POINTS } from '@/lib/pointEdit';
 import { priorOf, isApproved, nextScanForPatient, nextPatient } from '@/lib/patients';
 import { fetchAll } from '@/lib/data';
 import { saveNodule, logEvent, approveScan, markCentralChecked } from '@/lib/edits';
@@ -108,12 +109,10 @@ function ReviewScan() {
     initRef.current = true;
     (async () => {
       const findings = findQ.data.findings || [];
-      if (nodQ.data.length === 0) {
-        await initNodules(scan, findings, priorQ.data?.nodules || []);
-        if (scan.timepoint !== 'Baseline') await initNotFound(scan, findQ.data.match_summary, priorQ.data?.nodules || []);
-      }
-      await Scan.update(scan.id, { review_status: 'In review', first_opened_at: scan.first_opened_at || new Date().toISOString(), ai_findings_count: findings.length,
-        ai_fingerprint: fingerprint(findQ.data), ai_imported_at: new Date().toISOString(), engine_version: health.data?.engine_version || scan.engine_version || '' });
+      // Guarded: creates only what isn't in Base44 yet, and only one tab / one page instance does it (see setupScan).
+      await setupScan(scan, { findings, matchSummary: findQ.data.match_summary, priorNodules: priorQ.data?.nodules || [],
+        scanPatch: { first_opened_at: scan.first_opened_at || new Date().toISOString(), ai_findings_count: findings.length,
+          ai_fingerprint: fingerprint(findQ.data), ai_imported_at: new Date().toISOString(), engine_version: health.data?.engine_version || scan.engine_version || '' } });
       qc.invalidateQueries({ queryKey: ['nodules', id] }); qc.invalidateQueries({ queryKey: ['scan', id] });
     })();
   }, [scan, me.isReviewer, nodQ.data, findQ.data, health.isLoading, priorQ.data, waitForPrior]);
@@ -195,6 +194,7 @@ function ReviewScan() {
   });
   const onDragEnd = (h) => {
     const d = draftRef.current;
+    if (h.kind === 'contour' && JSON.stringify(d.key_contour_px) === JSON.stringify(sel.key_contour_px)) return; // a click on a point (select), not a move
     if (h.kind === 'contour') {
       // Same path as Erase / Draw: axes and volume follow the moved points at once, and Undo works.
       const nid = sel.id;
@@ -202,6 +202,26 @@ function ReviewScan() {
         .then(() => { if (refineOk && sel.engine_finding_id) recomputeFromPolygon(nid, d.key_contour_px); });
     } else save({ [h.kind]: d[h.kind], [h.kind === 'long_axis_px' ? 'long_axis_mm' : 'short_axis_mm']: lenMm(d[h.kind], sp) });
   };
+
+  // ---- Single points (Stav, 17 Oct): click an edge to add one; Alt+click a point, or select it + Backspace, to delete.
+  // Same path as dragging points: editSlice → axes + volume recomputed, Edit trail row, Undo.
+  const [ptSel, setPtSel] = useState(null);
+  useEffect(() => setPtSel(null), [selId, z]);
+  const addPoint = (i, pt) => {
+    const poly = draftRef.current?.key_contour_px || draft?.key_contour_px;
+    const r = poly && insertPoint(poly, i, pt);
+    if (!r) return;
+    setPtSel(r.idx);
+    editSlice(sel, sel.key_slice_z, r.poly, 'point added by hand');
+  };
+  const removePoint = (idx) => {
+    const poly = draftRef.current?.key_contour_px || draft?.key_contour_px;
+    const next = poly && deletePoint(poly, idx);
+    if (!next) { setNotice(`An outline needs at least ${MIN_POINTS} points. Use Erase or Draw to reshape it instead.`); return; }
+    setPtSel(null);
+    editSlice(sel, sel.key_slice_z, next, 'point deleted by hand');
+  };
+  const points = !locked && sel && sel.kind !== 'prior_not_found' && z === sel.key_slice_z && !mode ? { selected: ptSel, select: setPtSel, add: addPoint, remove: removePoint } : null;
 
   // ---- Corrections without an engine: erase (E), draw (D), undo (Ctrl+Z) ----
   const brushPx = brushMm / (sp[1] || 1);
@@ -372,7 +392,7 @@ function ReviewScan() {
   };
 
   const keys = useRef();
-  keys.current = { accept, next, canAct: !locked && !!sel, reject: () => setRejectOpen(true), step, quick: !locked && !!sel && refineOk && !!meta, edit: !locked && !!sel && !!meta, setMode, undo, setBrushMm, jump: () => sel && setZ(sel.key_slice_z) };
+  keys.current = { accept, next, canAct: !locked && !!sel, reject: () => setRejectOpen(true), step, quick: !locked && !!sel && refineOk && !!meta, edit: !locked && !!sel && !!meta, setMode, undo, ptSel, removePoint, setBrushMm, jump: () => sel && setZ(sel.key_slice_z) };
   useEffect(() => {
     const h = (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
@@ -381,7 +401,8 @@ function ReviewScan() {
       if (e.ctrlKey || e.metaKey) return;
       if (e.key === 'ArrowUp') { e.preventDefault(); k.step(-1); }
       else if (e.key === 'ArrowDown') { e.preventDefault(); k.step(1); }
-      else if (e.key === 'Escape') { setMode(null); setClicks([]); }
+      else if ((e.key === 'Backspace' || e.key === 'Delete') && k.edit && k.ptSel != null) { e.preventDefault(); k.removePoint(k.ptSel); }
+      else if (e.key === 'Escape') { setMode(null); setClicks([]); setPtSel(null); }
       else if (e.key.toLowerCase() === 'n') k.next();
       else if (k.canAct && e.key.toLowerCase() === 'a') k.accept();
       else if (k.canAct && e.key.toLowerCase() === 'r') k.reject();
@@ -442,7 +463,7 @@ function ReviewScan() {
             <div className="flex-1 grid place-items-center"><Loader2 className="w-5 h-5 animate-spin text-neutral-500" /></div>
           ) : (
             <ViewerPane meta={meta} base={base} sid={sid} z={z} step={step} setZ={setZ} win={win} setWin={setWin} nodules={nodules} shapes={shapes}
-              sel={sel} draft={draft} editable={!locked} mode={mode} clicks={clicks} onSelect={select} onImageClick={onImageClick}
+              sel={sel} draft={draft} editable={!locked} mode={mode} clicks={clicks} onSelect={select} onImageClick={onImageClick} points={points}
               onDrag={onDrag} onDragEnd={onDragEnd} showRejected={showRejected} setShowRejected={setShowRejected} modeBar={modeBar} busy={busy}
               onStrokeEnd={onStrokeEnd} brushPx={brushPx}
               priorView={priorView && priorQ.data?.scan ? { base, priorScan: priorQ.data.scan, pn: priorView, onClose: () => setPriorView(null) } : null}

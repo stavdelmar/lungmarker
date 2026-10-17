@@ -3,7 +3,7 @@ import { uncertainty } from '@/lib/uncertainty';
 const pts = (p) => p.map((q) => q.join(',')).join(' ');
 const AXES = ['long_axis_px', 'short_axis_px'];
 
-export default function Overlay({ shapes, selId, draft, isKey, editable, scale, startDrag, onSelect, clicks, interactive, tool, stroke, hover, brushPx }) {
+export default function Overlay({ shapes, selId, draft, isKey, editable, scale, startDrag, onSelect, clicks, interactive, tool, stroke, hover, brushPx, points, toImg }) {
   // Line widths in screen pixels at any zoom (vector-effect ignores the viewer's CSS zoom transform).
   const sw = (w) => w / (scale || 1);
   const r = 4 / scale, fs = 12 / scale;
@@ -29,10 +29,25 @@ export default function Overlay({ shapes, selId, draft, isKey, editable, scale, 
       {isKey && draft?.short_axis_px?.length === 2 && <line x1={draft.short_axis_px[0][0]} y1={draft.short_axis_px[0][1]} x2={draft.short_axis_px[1][0]} y2={draft.short_axis_px[1][1]} stroke="#f0abfc" strokeWidth={sw(1.5)} strokeDasharray={`${sw(5)} ${sw(4)}`} style={{ pointerEvents: 'none' }} />}
       {isKey && editable && draft && (
         <>
-          {(draft.key_contour_px || []).map((p, i) => (
-            <circle key={'h' + i} cx={p[0]} cy={p[1]} r={r} fill="#0f172a" stroke="#5eead4" strokeWidth={sw(1.2)} style={{ cursor: 'move' }}
-              onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); startDrag({ kind: 'contour', idx: i }); }} />
-          ))}
+          {/* Edges: click to add a point there (wide invisible hit line under the points). */}
+          {points && (draft.key_contour_px || []).map((p, i, poly) => {
+            const q = poly[(i + 1) % poly.length];
+            return <line key={'e' + i} x1={p[0]} y1={p[1]} x2={q[0]} y2={q[1]} stroke="transparent" strokeWidth={sw(10)} style={{ cursor: 'copy' }} data-edge={i}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); points.add(i, toImg(e)); }} />;
+          })}
+          {(draft.key_contour_px || []).map((p, i) => {
+            const on = points?.selected === i;
+            return (
+              <circle key={'h' + i} cx={p[0]} cy={p[1]} r={on ? r * 1.4 : r} fill={on ? '#5eead4' : '#0f172a'} stroke={on ? '#ffffff' : '#5eead4'} strokeWidth={sw(on ? 1.6 : 1.2)} style={{ cursor: 'move' }} data-point={i}
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => {
+                  e.stopPropagation(); e.preventDefault();
+                  if (e.altKey && points) { points.remove(i); return; } // Alt+click deletes the point
+                  points?.select(i); startDrag({ kind: 'contour', idx: i });
+                }} />
+            );
+          })}
           {AXES.map((k) => (draft[k] || []).map((p, i) => (
             <rect key={k + i} x={p[0] - r} y={p[1] - r} width={r * 2} height={r * 2} fill="#f0abfc" stroke="#0f172a" strokeWidth={sw(1)} style={{ cursor: 'move' }}
               onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); startDrag({ kind: k, idx: i }); }} />
