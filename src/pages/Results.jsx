@@ -92,11 +92,7 @@ export default function Results() {
       <div className="flex items-end justify-between gap-4">
         <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
         <div className="flex items-center gap-3">
-          {curTab === 'sheet' && <button onClick={exportExcel} disabled={busy || !toExport.length}
-            className="h-8 px-3 rounded-md bg-slate-900 text-white text-sm flex items-center gap-2 hover:bg-slate-800 disabled:opacity-40">
-            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-            Export to Excel <span className="font-mono text-xs opacity-80">({toExport.length})</span>
-          </button>}
+
         </div>
       </div>
       {exportMsg && <p className="text-xs text-slate-500 -mt-3 text-right">{exportMsg}</p>}
@@ -107,7 +103,12 @@ export default function Results() {
         ))}
       </div>
       {curTab === 'perf' ? <Performance scans={scans} settings={settings} /> : curTab === 'patients' ? <PatientsOverTime scans={scans} nodules={nodQ.data || []} base={settings.engine_base_url} q={search.patients} setQ={setQ} /> : <>
-      <ReportBuilder f={f} setF={setF} patients={patientIds} />
+      <ReportBuilder f={f} setF={setF} patients={patientIds} exportButton={
+        <button onClick={exportExcel} disabled={busy || !toExport.length}
+          className="h-8 px-3 rounded-md bg-slate-900 text-white text-xs font-medium flex items-center gap-2 hover:bg-slate-800 disabled:opacity-40 whitespace-nowrap">
+          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+          Export to Excel <span className="font-mono opacity-80">({toExport.length})</span>
+        </button>} />
       <div className="flex flex-wrap items-center gap-2">
         {[['all', 'All', nodules.length], ['new', 'Not exported', counts.new], ['changed', 'Changed since export', counts.changed]].map(([k, label, c]) => (
           <button key={k} onClick={() => setView(k)} className={`h-7 px-3 rounded-full text-xs border ${view === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}>

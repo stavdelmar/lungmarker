@@ -14,10 +14,10 @@ export default function Overlay({ sp, shapes, selId, draft, isKey, editable, sca
       {shapes.map(({ n, polys, filled, end }) => polys.filter((p) => p.length > 2).map((p, i) => {
         const isSel = n.id === selId;
         return (
-          <polygon key={n.id + i} points={pts(p)} fill={isSel ? (end ? 'rgba(94,234,212,0.25)' : 'rgba(94,234,212,0.07)') : 'transparent'}
-            stroke={isSel && end ? '#ffffff' : STROKE[tone(n, selId)]} strokeWidth={sw(isSel ? (end ? 3.5 : 2.5) : 1)}
+          <polygon key={n.id + i} points={pts(p)} fill={isSel ? (end ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.06)') : 'transparent'}
+            stroke={isSel && end ? '#ffffff' : STROKE[tone(n)]} strokeWidth={sw(isSel ? (end ? 3.5 : 3) : 1)} strokeOpacity={isSel ? 1 : 0.65}
+            style={{ filter: isSel ? 'brightness(1.25)' : undefined, cursor: interactive ? 'pointer' : undefined, pointerEvents: interactive ? 'all' : 'none' }}
             strokeDasharray={n.status === 'Rejected' ? `${sw(4)} ${sw(3)}` : filled ? `${sw(2)} ${sw(3)}` : undefined}
-            style={{ cursor: interactive ? 'pointer' : undefined, pointerEvents: interactive ? 'all' : 'none' }}
             onClick={(e) => { if (!interactive) return; e.stopPropagation(); onSelect(n); }} />
         );
       }))}
@@ -25,7 +25,7 @@ export default function Overlay({ sp, shapes, selId, draft, isKey, editable, sca
         const p = polys.find((q) => q.length > 2) || (n.id === selId && isKey ? draft?.long_axis_px : null);
         if (!p) return null;
         const x = Math.max(...p.map((q) => q[0])), y = Math.min(...p.map((q) => q[1]));
-        return <text key={'t' + n.id} x={x + 5 / scale} y={y} fontSize={fs} fontFamily="JetBrains Mono, monospace" fill={STROKE[tone(n, selId)]} style={{ pointerEvents: 'none' }}>{n.nodule_label}{uncertainty(n).unsure && n.status === 'Pending' ? ' ?' : ''}</text>;
+        return <text key={'t' + n.id} x={x + 5 / scale} y={y} fontSize={fs} fontFamily="JetBrains Mono, monospace" fill={STROKE[tone(n)]} fontWeight={n.id === selId ? 700 : 400} style={{ pointerEvents: 'none' }}>{n.nodule_label}{uncertainty(n).unsure && n.status === 'Pending' ? ' ?' : ''}</text>;
       })}
       {/* Caliper lengths on the lines themselves (follow the drag live). */}
       {isKey && draft && AXES.map((k) => {

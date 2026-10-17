@@ -94,7 +94,7 @@ export default function ViewerPane(p) {
         <div className="absolute left-3 top-2 z-10 pointer-events-none font-mono text-[12px] leading-5 text-neutral-200 [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">
           <div>Slice #{sliceNo} <span className="text-neutral-400">({z + 1}/{n})</span></div>
           <div className="text-neutral-400">{win.charAt(0).toUpperCase() + win.slice(1)} window</div>
-          {sel && <div className="text-teal-300">{sel.nodule_label}{isKey ? '' : <span className="text-neutral-400"> · key slice #{meta.slices?.find((s) => s.z === sel.key_slice_z)?.slice_number ?? (sel.key_slice_z ?? 0) + 1}</span>}</div>}
+          {sel && <div className="text-white font-semibold">{sel.nodule_label}{isKey ? '' : <span className="text-neutral-400"> · key slice #{meta.slices?.find((s) => s.z === sel.key_slice_z)?.slice_number ?? (sel.key_slice_z ?? 0) + 1}</span>}</div>}
           {sel && sel.kind !== 'prior_not_found' && <div className="text-fuchsia-300 pointer-events-auto w-fit" title="Long axis × Short axis (mm)">{fmtMaybe(sel.long_axis_mm)} × {fmtMaybe(sel.short_axis_mm)} mm</div>}
           {span && (
             <div className="pointer-events-auto flex items-center gap-1 text-neutral-300">
@@ -119,7 +119,7 @@ export default function ViewerPane(p) {
         </Viewer>
         </div>
         <SliceSlider z={z} n={n} onChange={setZ} range={span}
-          ticks={nodules.filter((x) => x.key_slice_z != null && (showRejected || x.status !== 'Rejected')).map((x) => ({ id: x.id, z: x.key_slice_z, label: x.nodule_label, color: tone(x, sel?.id) }))} />
+          ticks={nodules.filter((x) => x.key_slice_z != null && (showRejected || x.status !== 'Rejected')).map((x) => ({ id: x.id, z: x.key_slice_z, label: x.nodule_label, color: tone(x), sel: x.id === sel?.id }))} />
       </div>
     </div>
   );

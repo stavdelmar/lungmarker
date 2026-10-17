@@ -2,7 +2,7 @@ import { useRef } from 'react';
 
 // Same colour rule as chips and image outlines (see lib/noduleTone).
 const TICK = {
-  selected: 'bg-teal-300', pending: 'bg-slate-400', accepted: 'bg-emerald-400', unsure: 'bg-amber-400',
+  pending: 'bg-slate-400', accepted: 'bg-emerald-400', unsure: 'bg-amber-400',
   rejected: 'bg-transparent border-t-2 border-dashed border-red-400 h-0',
 };
 
@@ -20,12 +20,12 @@ export default function SliceSlider({ z, n, ticks, onChange, range }) {
         onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); set(e); }}
         onPointerMove={(e) => e.buttons === 1 && set(e)}>
         <div className="absolute left-1/2 -translate-x-1/2 inset-y-0 w-px bg-neutral-700" />
-        {range && ( /* selected nodule's outline range: thin teal bracket, first → last slice */
-          <div title={`Outline: slices ${range.firstNum}–${range.lastNum}`} className="absolute -left-0.5 w-1 border-l-2 border-y-2 border-teal-400 rounded-l-sm"
+        {range && ( /* selected nodule's outline range: thin neutral bracket, first → last slice */
+          <div title={`Outline: slices ${range.firstNum}–${range.lastNum}`} className="absolute -left-0.5 w-1 border-l border-y border-neutral-300 rounded-l-sm"
             style={{ top: pos(range.first), height: `calc(${pos(range.last)} - ${pos(range.first)})`, minHeight: 3 }} />
         )}
         {ticks.map((t) => (
-          <div key={t.id} title={t.label} className={`absolute left-0.5 right-0.5 h-[3px] -translate-y-1/2 rounded-full ${TICK[t.color]}`} style={{ top: pos(t.z) }} />
+          <div key={t.id} title={t.label} className={`absolute -translate-y-1/2 rounded-full ${t.sel ? '-left-1 -right-1 h-[5px] z-[1]' : 'left-1 right-1 h-[2px]'} ${TICK[t.color]}`} style={{ top: pos(t.z) }} />
         ))}
         <div className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-1.5 rounded-sm bg-white shadow" style={{ top: pos(z) }} />
       </div>

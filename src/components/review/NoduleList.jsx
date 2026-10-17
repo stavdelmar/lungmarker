@@ -31,8 +31,8 @@ function Row({ n, sel, onSelect }) {
   return (
     <button onClick={() => onSelect(n)}
       className={`w-full text-left pl-3 pr-4 py-2 flex items-center gap-3 border-l-4 transition-colors
-        ${n.id === sel ? 'border-l-teal-600' : u.unsure ? 'border-l-amber-400' : nf && n.status === 'Pending' ? 'border-l-amber-300' : 'border-l-transparent'}
-        ${n.id === sel ? 'bg-teal-50/70' : u.unsure ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-slate-50'}`}>
+        ${n.id === sel ? 'border-l-slate-900' : u.unsure ? 'border-l-amber-400' : nf && n.status === 'Pending' ? 'border-l-amber-300' : 'border-l-transparent'}
+        ${n.id === sel ? 'bg-slate-100' : u.unsure ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-slate-50'}`}>
       <span className={`font-mono text-sm w-8 shrink-0 ${n.id === sel ? 'text-teal-800 font-semibold' : ''}`}>{nf ? n.prior_label : n.nodule_label}</span>
       <span className="text-xs text-slate-500 w-9 shrink-0">{n.lobe || '—'}</span>
       {nf ? (
@@ -58,7 +58,7 @@ function CentralRow({ central, sel, onSelect }) {
   const on = sel === CENTRAL;
   return (
     <button onClick={() => onSelect({ id: CENTRAL })}
-      className={`w-full text-left pl-3 pr-4 py-2.5 flex items-center gap-3 border-l-4 border-t border-t-slate-200 ${on ? 'border-l-teal-600' : central.done ? 'border-l-transparent' : 'border-l-amber-400'} ${on ? 'bg-teal-50/70' : central.done ? 'hover:bg-slate-50' : 'bg-amber-50/60 hover:bg-amber-50'}`}>
+      className={`w-full text-left pl-3 pr-4 py-2.5 flex items-center gap-3 border-l-4 border-t border-t-slate-200 ${on ? 'border-l-slate-900' : central.done ? 'border-l-transparent' : 'border-l-amber-400'} ${on ? 'bg-slate-100' : central.done ? 'hover:bg-slate-50' : 'bg-amber-50/60 hover:bg-amber-50'}`}>
       {central.done ? <CircleCheck className="w-4 h-4 text-emerald-600 shrink-0" /> : <ScanSearch className="w-4 h-4 text-amber-700 shrink-0" />}
       <span className={`flex-1 text-sm ${on ? 'font-semibold text-teal-900' : 'text-slate-800'}`}>Central areas <span className="text-slate-500 font-normal">(hilum / mediastinum)</span></span>
       {central.done
