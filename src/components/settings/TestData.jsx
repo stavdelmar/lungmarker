@@ -72,6 +72,7 @@ export default function TestData({ base }) {
         </button>
         <span className="text-slate-400">Select:</span>
         <button onClick={() => pick((s) => states[s.id] === 'changed')} className="underline text-slate-700 disabled:opacity-40" disabled={!Object.keys(states).length}>changed</button>
+        <button onClick={() => pick(() => true)} className="underline text-slate-700 font-medium">all scans</button>
         <button onClick={() => pick((s) => s.review_status !== 'Not started')} className="underline text-slate-700">all opened / approved</button>
         <button onClick={() => setSel(new Set())} className="underline text-slate-700">none</button>
       </div>
