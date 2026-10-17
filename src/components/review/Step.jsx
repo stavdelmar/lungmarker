@@ -2,7 +2,7 @@ import { Check, ChevronDown } from 'lucide-react';
 
 // One step of the nodule stepper. state: done | current | todo | skipped. Closed steps show a one-line summary.
 export default function Step({ n, title, state, open, summary, onToggle, last, children }) {
-  const dot = state === 'done' ? 'bg-emerald-600 text-white' : state === 'current' ? 'bg-teal-600 text-white ring-4 ring-teal-100' : 'bg-white text-slate-400 border border-slate-300';
+  const dot = state === 'done' ? 'bg-emerald-600 text-white' : state === 'current' ? 'bg-slate-900 text-white ring-4 ring-slate-200' : 'bg-white text-slate-400 border border-slate-300';
   return (
     <div className="relative flex gap-3">
       {!last && <span className="absolute left-[13px] top-8 bottom-0 w-px bg-slate-200" />}

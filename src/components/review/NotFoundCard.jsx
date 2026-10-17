@@ -39,7 +39,7 @@ export default function NotFoundCard({ n, locked, prior, onConfirm, onHere, onRe
             <button onClick={() => onConfirm(n, note.trim())} className="h-9 px-3 rounded-md bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 flex items-center gap-1.5">
               <Check className="w-4 h-4" />Confirm not found <kbd className="text-[10px] opacity-70">A</kbd></button>
             <button onClick={() => onHere(n)} className="h-9 px-3 rounded-md border border-slate-300 bg-white text-sm hover:bg-slate-50 flex items-center gap-1.5">
-              <Eye className="w-4 h-4" />It's here, I'll mark it</button>
+              <Eye className="w-4 h-4" />It's here</button>
           </div>
           <p className="text-[11.5px] text-slate-500">Scroll the scan first. If it shows up under another number, set that nodule's Match to prior to {n.prior_label}; this item then closes by itself.</p>
         </>

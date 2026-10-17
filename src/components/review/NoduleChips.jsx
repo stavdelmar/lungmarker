@@ -1,20 +1,28 @@
-import { List } from 'lucide-react';
+import { List, HelpCircle } from 'lucide-react';
 import { CENTRAL } from '@/lib/reviewChecks';
 import { uncertainty } from '@/lib/uncertainty';
 
-const tone = (decided, unsure) => (decided ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : unsure ? 'bg-amber-100 text-amber-900 border-amber-400' : 'bg-slate-100 text-slate-700 border-slate-300');
+const GREEN = 'bg-emerald-50 text-emerald-800 border-emerald-300';
+const AMBER = 'bg-amber-100 text-amber-900 border-amber-400';
+const GREY = 'bg-slate-100 text-slate-700 border-slate-300';
 
-// Compact nodule picker: grey pending, green decided, amber AI unsure.
+// Compact nodule picker. Green = decided, amber = AI unsure (only), grey = pending.
 export default function NoduleChips({ nodules, selId, onSelect, central, onList }) {
-  const chip = (key, label, cls, on, click) => (
-    <button key={key} onClick={click} className={`h-7 px-2.5 rounded-full border text-xs font-mono whitespace-nowrap ${cls} ${on ? 'ring-2 ring-teal-600 ring-offset-1' : ''}`}>{label}</button>
+  const chip = (key, content, cls, on, click) => (
+    <button key={key} onClick={click} className={`h-7 min-w-10 px-2.5 rounded-full border text-xs font-mono whitespace-nowrap flex items-center justify-center gap-1 ${cls} ${on ? 'ring-2 ring-slate-900 ring-offset-1' : ''}`}>{content}</button>
   );
   return (
     <div className="flex flex-wrap items-center gap-1.5 px-3 py-2 bg-white border-b border-slate-200">
-      {nodules.map((n) => chip(n.id, n.kind === 'prior_not_found' ? `Prior ${n.prior_label}?` : n.nodule_label,
-        tone(n.status !== 'Pending', uncertainty(n).unsure), n.id === selId, () => onSelect(n)))}
-      {central && chip(CENTRAL, 'Central', tone(central.done, true), selId === CENTRAL, () => onSelect({ id: CENTRAL }))}
-      <button onClick={onList} className="ml-auto h-7 px-2 rounded text-xs text-slate-600 hover:bg-slate-100 flex items-center gap-1"><List className="w-3.5 h-3.5" />List view</button>
+      {nodules.map((n) => {
+        const decided = n.status !== 'Pending';
+        if (n.kind === 'prior_not_found') {
+          return chip(n.id, <><HelpCircle className="w-3.5 h-3.5 shrink-0" />Baseline {n.prior_label}: missing?</>,
+            `border-dashed ${decided ? GREEN : 'bg-white text-slate-700 border-slate-400'}`, n.id === selId, () => onSelect(n));
+        }
+        return chip(n.id, n.nodule_label, decided ? GREEN : uncertainty(n).unsure ? AMBER : GREY, n.id === selId, () => onSelect(n));
+      })}
+      {central && chip(CENTRAL, 'Central', central.done ? GREEN : GREY, selId === CENTRAL, () => onSelect({ id: CENTRAL }))}
+      <button onClick={onList} className="ml-auto h-7 px-2 rounded text-xs text-slate-600 hover:bg-slate-100 flex items-center gap-1 whitespace-nowrap"><List className="w-3.5 h-3.5" />List view</button>
     </div>
   );
 }

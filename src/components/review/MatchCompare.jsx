@@ -8,7 +8,7 @@ const shapesOf = (n) => [...(n.key_contour_px?.length > 2 ? [{ poly: n.key_conto
 const focusOf = (n) => (n.key_contour_px?.length ? n.key_contour_px : n.long_axis_px || []);
 const sizeOf = (n) => { const b = boxOf(n); return b ? Math.max(b[2] - b[0], b[3] - b[1]) / 2 + 40 : 60; };
 const num = (l) => parseInt(String(l).slice(1), 10) || 0;
-const btn = 'h-9 px-3 rounded-md text-sm font-medium border flex items-center justify-center gap-1.5 disabled:opacity-40';
+const btn = 'h-9 flex-1 min-w-20 px-3 whitespace-nowrap rounded-md text-sm font-medium border flex items-center justify-center gap-1.5 disabled:opacity-40';
 
 // Step 3: the AI-suggested prior nodule next to the current one (same zoom), then Same / others / New.
 export default function MatchCompare({ sel, nodules, prior, aiSuggest, locked, onSave, onOpenPrior }) {
@@ -45,10 +45,10 @@ export default function MatchCompare({ sel, nodules, prior, aiSuggest, locked, o
         </>
       )}
       {!locked && (
-        <div className="grid grid-cols-3 gap-1.5">
-          <button disabled={!pn} onClick={() => onSave({ match_to_prior: cand })} className={`${btn} bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700`}>Same nodule{pn ? ` (${cand})` : ''}</button>
-          <button onClick={() => setOthers(!others)} className={`${btn} bg-white border-slate-300 hover:bg-slate-50 ${others ? 'ring-2 ring-slate-300' : ''}`}>Not this one, show others</button>
-          <button onClick={() => onSave({ match_to_prior: 'N/A' })} className={`${btn} bg-white border-slate-300 hover:bg-slate-50 ${sel.match_to_prior === 'N/A' ? 'ring-2 ring-teal-500' : ''}`}>New nodule (N/A)</button>
+        <div className="flex flex-wrap gap-1.5">
+          <button disabled={!pn} onClick={() => onSave({ match_to_prior: cand })} className={`${btn} bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700`}>Same{pn ? ` (${cand})` : ''}</button>
+          <button onClick={() => setOthers(!others)} className={`${btn} bg-white border-slate-300 hover:bg-slate-50 ${others ? 'ring-2 ring-slate-300' : ''}`}>Other…</button>
+          <button onClick={() => onSave({ match_to_prior: 'N/A' })} className={`${btn} bg-white border-slate-300 hover:bg-slate-50 ${sel.match_to_prior === 'N/A' ? 'ring-2 ring-slate-900' : ''}`}>New (N/A)</button>
         </div>
       )}
       {others && (

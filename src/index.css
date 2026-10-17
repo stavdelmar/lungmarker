@@ -90,4 +90,13 @@
   body {
     @apply bg-background text-foreground font-body;
   }
+
+  /* Review panel: button labels stay on one line and never touch the border. */
+  .nodule-panel button {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .nodule-panel button:is([class*=" h-8"], [class*=" h-9"], [class*=" h-10"], [class^="h-8"], [class^="h-9"], [class^="h-10"]):not([class*="w-7"]):not([class*="w-full"]) {
+    min-width: 4.5rem;
+  }
 }

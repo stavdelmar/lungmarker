@@ -30,7 +30,7 @@ function CentralDetail({ central, locked, onAdd }) {
         <div className="flex gap-2">
           <button onClick={onAdd} className="h-10 px-3 rounded-md border border-slate-300 bg-white text-sm hover:bg-slate-50 flex items-center gap-1"><Plus className="w-4 h-4" />Add nodule</button>
           <button onClick={central.onCheck} className="h-10 flex-1 px-3 rounded-md bg-amber-500 text-amber-950 text-sm font-semibold hover:bg-amber-400 flex items-center justify-center gap-1.5">
-            <Check className="w-4 h-4" />I checked the hilum and mediastinum
+            <Check className="w-4 h-4 shrink-0" />Mark checked
           </button>
         </div>
       )}
@@ -45,7 +45,7 @@ export default function NodulePanel(p) {
   const approved = scan.review_status === 'Approved';
   const [listView, setListView] = useState(false);
   return (
-    <aside className="w-[35%] min-w-[420px] border-l border-slate-200 bg-slate-50 flex flex-col min-h-0">
+    <aside className="nodule-panel w-[35%] min-w-[420px] border-l border-slate-200 bg-slate-50 flex flex-col min-h-0">
       <div className="h-10 shrink-0 flex items-center px-4 border-b border-slate-200 bg-white">
         <span className="text-[11px] uppercase tracking-wider text-slate-500">Nodules <span className="font-mono">({nodules.length})</span></span>
         {!locked && !waitForPrior && <button onClick={onAdd} className={`ml-auto text-xs flex items-center gap-1 px-2 h-7 rounded ${adding ? 'bg-teal-600 text-white' : 'text-teal-700 hover:bg-teal-50'}`}><Plus className="w-3.5 h-3.5" />Add nodule</button>}

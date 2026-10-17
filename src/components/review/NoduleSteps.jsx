@@ -7,7 +7,8 @@ import { VolumeConfirm, Measurements, Notes } from '@/components/review/NoduleFo
 import { fmtMaybe } from '@/components/review/viewerUtils';
 import { uncertainty } from '@/lib/uncertainty';
 
-const quick = 'h-8 px-2.5 rounded-md border border-rose-200 bg-white text-rose-700 text-xs hover:bg-rose-50';
+const quick = 'h-8 min-w-16 px-3 rounded-md border border-rose-200 bg-white text-rose-700 text-xs hover:bg-rose-50 whitespace-nowrap';
+const big = 'h-9 flex-1 min-w-24 px-3 rounded-md text-sm font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap';
 
 // Daniel's order: 1 is it a nodule · 2 outline & measurements · 3 match to prior (follow-ups) · 4 notes & accept.
 // Keyed by nodule in the panel, so the local "continue" flags are per nodule.
@@ -15,6 +16,7 @@ export default function NoduleSteps({ sel, nodules, locked, followup, canAccept,
   const [isNodule, setIsNodule] = useState(false);
   const [measOk, setMeasOk] = useState(false);
   const [openStep, setOpenStep] = useState(null);
+  const [rejecting, setRejecting] = useState(false);
   const u = uncertainty(sel);
   const rejected = sel.status === 'Rejected', accepted = sel.status === 'Accepted';
   const done = [sel.status !== 'Pending' || isNodule, accepted || measOk, !followup || !!sel.match_to_prior, accepted];
@@ -32,14 +34,16 @@ export default function NoduleSteps({ sel, nodules, locked, followup, canAccept,
         {!locked && (
           <div className="space-y-2">
             <div className="flex gap-2">
-              <button onClick={() => advance(() => setIsNodule(true))} className="h-9 flex-1 rounded-md bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 flex items-center justify-center gap-1.5"><Check className="w-4 h-4" />Yes, continue</button>
-              <button onClick={onRejectClick} className="h-9 flex-1 rounded-md border-2 border-rose-200 bg-white text-rose-700 text-sm font-semibold hover:bg-rose-50 flex items-center justify-center gap-1.5"><X className="w-4 h-4" />Reject: not a nodule <kbd className="text-[10px] opacity-70 font-normal">R</kbd></button>
+              <button onClick={() => advance(() => setIsNodule(true))} className={`${big} bg-slate-900 text-white hover:bg-slate-800`}><Check className="w-4 h-4 shrink-0" />Yes</button>
+              <button onClick={() => setRejecting((r) => !r)} className={`${big} border-2 border-rose-200 bg-white text-rose-700 hover:bg-rose-50`}><X className="w-4 h-4 shrink-0" />Reject</button>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-slate-500">Quick:
-              <button className={quick} onClick={() => onReject('Vessel')}>Vessel</button>
-              <button className={quick} onClick={() => onReject('Scar/artefact')}>Scar</button>
-              <button className={quick} onClick={onRejectClick}>Other…</button>
-            </div>
+            {rejecting && (
+              <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">Why?
+                <button className={quick} onClick={() => onReject('Vessel')}>Vessel</button>
+                <button className={quick} onClick={() => onReject('Scar/artefact')}>Scar</button>
+                <button className={quick} onClick={onRejectClick}>Other…</button>
+              </div>
+            )}
           </div>
         )}
       </Step>
@@ -55,7 +59,7 @@ export default function NoduleSteps({ sel, nodules, locked, followup, canAccept,
         <p className="text-[11.5px] text-slate-500">Edit the outline on the image (Erase E · Draw D), then confirm it.</p>
         <VolumeConfirm n={sel} locked={locked} onSave={formProps.onSave} onConfirm={formProps.onConfirm} />
         <Measurements n={sel} locked={locked} onSave={formProps.onSave} />
-        {!locked && !accepted && <button onClick={() => advance(() => setMeasOk(true))} className="h-8 px-3 rounded-md bg-slate-900 text-white text-sm hover:bg-slate-800 flex items-center gap-1">Continue<ChevronRight className="w-4 h-4" /></button>}
+        {!locked && !accepted && <button onClick={() => advance(() => setMeasOk(true))} className="h-8 min-w-24 px-3 rounded-md bg-slate-900 text-white text-sm hover:bg-slate-800 flex items-center justify-center gap-1 whitespace-nowrap">Continue<ChevronRight className="w-4 h-4" /></button>}
       </Step>
       <Step n={3} title="Match to prior" state={state(3)} open={followup && cur === 3} onToggle={() => followup && toggle(3)} summary={followup ? match : 'Skipped on baseline'}>
         <MatchCompare sel={sel} nodules={nodules} prior={prior} aiSuggest={formProps.aiSuggest} {...sp} onOpenPrior={onOpenPrior} />
@@ -65,8 +69,8 @@ export default function NoduleSteps({ sel, nodules, locked, followup, canAccept,
         {!locked && (
           <div>
             <div className="flex gap-2">
-              <button onClick={onAccept} disabled={!canAccept} title="Accept (A)" className="h-10 flex-1 rounded-md bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center justify-center gap-1.5"><Check className="w-4 h-4" />Accept {sel.nodule_label} → next <kbd className="text-[10px] opacity-70 font-normal">A</kbd></button>
-              <button onClick={onNext} className="h-10 px-3 rounded-md border border-slate-200 text-sm hover:bg-slate-50 flex items-center gap-1">Skip <kbd className="text-[10px] opacity-60">N</kbd></button>
+              <button onClick={onAccept} disabled={!canAccept} title="Accept (A)" className="h-10 flex-1 min-w-24 px-3 rounded-md bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center justify-center gap-1.5 whitespace-nowrap"><Check className="w-4 h-4 shrink-0" />Accept {sel.nodule_label} <kbd className="text-[10px] opacity-70 font-normal">A</kbd></button>
+              <button onClick={onNext} className="h-10 min-w-20 px-3 rounded-md border border-slate-200 text-sm hover:bg-slate-50 flex items-center justify-center gap-1 whitespace-nowrap">Skip <kbd className="text-[10px] opacity-60">N</kbd></button>
             </div>
             {!canAccept && <p className="text-[11.5px] text-amber-700 mt-1.5">{under4 ? 'Long axis is under 4 mm, so it is not measured. Reject it as "Under 4 mm", or correct the size.' : 'Record the match to prior (step 3) before accepting.'}</p>}
           </div>
