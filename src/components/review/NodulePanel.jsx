@@ -39,6 +39,15 @@ function CentralDetail({ central, locked, onAdd }) {
 }
 
 
+// Clickable inline text for the summary line: wraps like normal text (a <button> is always inline-block, so a long
+// reason inside it gets cut off instead of wrapping). Keyboard: Enter / Space.
+function InlineLink({ onClick, className = '', title, children }) {
+  return (
+    <span role="button" tabIndex={0} title={title} onClick={onClick} className={`cursor-pointer ${className}`}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}>{children}</span>
+  );
+}
+
 export default function NodulePanel(p) {
   const { scan, nodules, selId, sel, onSelect, locked, isReviewer, onAdd, adding, formProps, prior, followup, canAccept, under4, onAccept, onRejectClick, onNext, onReject, onOpenPrior,
     checks, onApprove, onReopen, central, notFound, next, waitForPrior, onSaveExit, unconfirmed = [], onAccountPrior, matchChecks = [] } = p;
@@ -114,19 +123,19 @@ export default function NodulePanel(p) {
           </div>
         ) : isReviewer && !waitForPrior ? (
           <div className="flex items-center gap-2 text-xs">
-            <span className="flex-1 min-w-0 truncate">
+            <span className="flex-1 min-w-0 leading-snug break-words">{/* wraps, never truncates: every reason stays visible */}
               {checks.ok ? <span className="text-emerald-700">All decided · central checked</span> : <>
                 {/* every reason at once ("1 not decided yet · N3: no lobe · prior N1 not matched or confirmed not found"); click → first open item */}
-                {!checks.nodulesOk && <button className="text-amber-700 hover:underline" title={checks.why}
-                  onClick={() => (checks.firstOpen ? onSelect(checks.firstOpen) : checks.unaccounted?.[0] && onAccountPrior?.(checks.unaccounted[0]))}>{checks.why}</button>}
+                {!checks.nodulesOk && <InlineLink className="text-amber-700 hover:underline" title={checks.why}
+                  onClick={() => (checks.firstOpen ? onSelect(checks.firstOpen) : checks.unaccounted?.[0] && onAccountPrior?.(checks.unaccounted[0]))}>{checks.why}</InlineLink>}
                 {!checks.nodulesOk && !central.done && ' · '}
-                {!central.done && <button className="text-amber-700 hover:underline" onClick={() => onSelect({ id: CENTRAL })}>central not checked</button>}
+                {!central.done && <InlineLink className="whitespace-nowrap text-amber-700 hover:underline" onClick={() => onSelect({ id: CENTRAL })}>central not checked</InlineLink>}
               </>}
-              {matchChecks.length > 0 && <button className="text-amber-700 hover:underline" title="A match looks implausible (lobe, size or position). Only a hint, you can still approve." onClick={() => onSelect(matchChecks[0])}> · {matchChecks.length} match{matchChecks.length === 1 ? '' : 'es'} to check</button>}
-              {unconfirmed.length > 0 && <button className="text-sky-700 hover:underline" title="No volume will be recorded for these. You can still approve." onClick={() => onSelect(unconfirmed[0])}> · {unconfirmed.length} outline{unconfirmed.length === 1 ? '' : 's'} unconfirmed</button>}
+              {matchChecks.length > 0 && <>{' · '}<InlineLink className="whitespace-nowrap text-amber-700 hover:underline" title="A match looks implausible (lobe, size or position). Only a hint, you can still approve." onClick={() => onSelect(matchChecks[0])}>{matchChecks.length} match{matchChecks.length === 1 ? '' : 'es'} to check</InlineLink></>}
+              {unconfirmed.length > 0 && <>{' · '}<InlineLink className="whitespace-nowrap text-sky-700 hover:underline" title="No volume will be recorded for these. You can still approve." onClick={() => onSelect(unconfirmed[0])}>{unconfirmed.length} outline{unconfirmed.length === 1 ? '' : 's'} unconfirmed</InlineLink></>}
             </span>
-            <button onClick={onSaveExit} className="h-8 px-2.5 rounded-md border border-slate-300 bg-white hover:bg-slate-100 flex items-center gap-1" title="Stops the timer, keeps everything, Continue brings you back here"><LogOut className="w-3.5 h-3.5" />Save &amp; exit</button>
-            <button onClick={onApprove} disabled={!checks.ok} className="h-8 px-3 rounded-md bg-slate-900 text-white font-medium hover:bg-slate-800 disabled:opacity-40">Approve →</button>
+            <button onClick={onSaveExit} className="shrink-0 whitespace-nowrap h-8 px-2.5 rounded-md border border-slate-300 bg-white hover:bg-slate-100 flex items-center gap-1" title="Stops the timer, keeps everything, Continue brings you back here"><LogOut className="w-3.5 h-3.5" />Save &amp; exit</button>
+            <button onClick={onApprove} disabled={!checks.ok} className="shrink-0 whitespace-nowrap h-8 px-3 rounded-md bg-slate-900 text-white font-medium hover:bg-slate-800 disabled:opacity-40">Approve →</button>
           </div>
         ) : waitForPrior ? null : <div className="text-xs text-slate-500 text-center">Read-only access</div>}
       </div>
