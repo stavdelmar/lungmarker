@@ -43,6 +43,14 @@ export function notFoundItems(scan, matchSummary, priorNodules) {
   }));
 }
 
+// The same item, created live when a prior nodule ends up matched by nothing in this scan (Daniel matched
+// differently than the AI suggested, or rejected the nodule that matched it).
+export function notFoundItemFor(scan, p) {
+  const [item] = notFoundItems(scan, { not_found_in_current: [p.engine_finding_id].filter(Boolean) }, [{ ...p, source: p.source || 'AI', engine_finding_id: p.engine_finding_id || '' }]);
+  const base = item || notFoundItems(scan, {}, [{ ...p, engine_finding_id: '', source: 'Added by reviewer' }])[0];
+  return { ...base, source: 'Not matched by any nodule in this scan', ai_draft: { ...base.ai_draft, from_engine: false, unmatched: true } };
+}
+
 export async function initNotFound(scan, matchSummary, priorNodules) {
   const recs = notFoundItems(scan, matchSummary, priorNodules);
   if (recs.length) await base44.entities.Nodule.bulkCreate(recs);

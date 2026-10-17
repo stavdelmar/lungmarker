@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Minus, Plus, Loader2, Eraser, PenLine, Undo2, MoreHorizontal, RotateCcw, Scissors, PlusCircle, MousePointerClick } from 'lucide-react';
 import { engine } from '@/api/engine';
-import { lenMm, fmtMaybe, boxOf } from '@/components/review/viewerUtils';
+import { fmtMaybe, boxOf } from '@/components/review/viewerUtils';
 import PriorPane from '@/components/review/PriorPane';
 import Viewer, { MAX_ZOOM } from '@/components/review/Viewer';
 import Overlay from '@/components/review/Overlay';

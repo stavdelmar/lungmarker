@@ -131,7 +131,9 @@ unchanged = [r for r in rows if "accepted unchanged" in str(r["Notes"])]
 covered = all(any(t["Nodule ID"] == r["Nodule ID"] and t["Timepoint"] == r["Timepoint"] and str(t["Field"]).startswith("AI draft") for t in trail) for r in rows)
 check("Edit trail: AI draft for every exported nodule", covered,
       f"{len(draft_rows)} 'AI draft' rows; AI value column filled on changed fields: {ai_shown}; nodules accepted unchanged: {len(unchanged)}")
-results_rows = [t for t in trail if t["Field"] == "Review result"]
+results_all = [t for t in trail if t["Field"] == "Review result"]
+_rej_markers = ("Rejected", "Added by reviewer; rejected", "marked present in this scan", "matched in this scan")
+results_rows = [t for t in results_all if not any(m in str(t["New value"]) for m in _rej_markers)]  # rejected findings are checked separately below
 check("Edit trail: review result per exported row (moved from Notes)", len(results_rows) == len(rows) + len(nf_rows),
       "; ".join(f"{t['Timepoint'][:4]} {t['Nodule ID']}: {t['New value']}" for t in results_rows))
 check("Edit trail: 'not found' recorded as AI draft + review result", any(t["Field"] == "Review result" and "confirmed not found" in str(t["New value"]) for t in trail)
@@ -188,6 +190,21 @@ for t in trows:
     chains[k] = t["New value"]
 multi = sum(1 for k in chains if sum(1 for t in trows if (t["Timepoint"], t["Nodule ID"], t["Field"]) == k) > 1)
 check("Repeated edits: each Previous value = the value just before it", not chain_bad, "; ".join(chain_bad) or f"{multi} field(s) edited more than once, all chained correctly")
+
+# Bug 2 (Stav, 17 Oct): rejected findings stay out of Measurements but are in the Edit trail
+rej = [n for n in state["nodules"] if n.get("status") == "Rejected"]
+rej_lbl = lambda n: f"prior {n['prior_label']}" if n.get("kind") == "prior_not_found" else n["nodule_label"]
+tp_of = {s["id"]: s["timepoint"] for s in state["scans"]}
+missing_trail, in_meas = [], []
+for n in rej:
+    tp, lbl = tp_of.get(n["scan"]), rej_lbl(n)
+    t = [x for x in trows if x["Timepoint"] == tp and x["Nodule ID"] == lbl]
+    if not any(x["Field"] == "AI draft" for x in t) or not any(x["Field"] == "Review result" and str(x["New value"]).lower().startswith(("rejected", "added by reviewer; rejected", "prior")) for x in t):
+        missing_trail.append(f"{tp} {lbl}")
+    if n.get("kind") != "prior_not_found" and any(r["Timepoint"] == tp and r["Nodule ID"] == lbl for r in rows + nf_rows):
+        in_meas.append(f"{tp} {lbl}")
+check("Rejected findings: not in Measurements, but AI draft + review result in the Edit trail", rej and not missing_trail and not in_meas,
+      f"{len(rej)} rejected: " + "; ".join(f"{tp_of.get(n['scan'])} {rej_lbl(n)} ({n.get('reject_reason')})" for n in rej) + (f" · MISSING in trail: {missing_trail}" if missing_trail else "") + (f" · IN MEASUREMENTS: {in_meas}" if in_meas else ""))
 
 w = max(len(n) for n, _, _ in results)
 for n, ok, ev in results:

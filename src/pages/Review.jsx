@@ -7,7 +7,7 @@ import { engine } from '@/api/engine';
 import { useMe } from '@/hooks/useMe';
 import { useSettings, useHealth } from '@/hooks/useAppData';
 import { useScanTimer } from '@/hooks/useScanTimer';
-import { initNodules, initNotFound } from '@/lib/initNodules';
+import { initNodules, initNotFound, notFoundItemFor } from '@/lib/initNodules';
 import { priorOf, isApproved, nextScanForPatient, nextPatient } from '@/lib/patients';
 import { fetchAll } from '@/lib/data';
 import { saveNodule, logEvent, approveScan, markCentralChecked } from '@/lib/edits';
@@ -16,7 +16,7 @@ import { brushEdit, lassoToPoly } from '@/lib/maskEdit';
 import { MIN_LONG_AXIS_MM } from '@/lib/exportRows';
 import { notFoundNote } from '@/lib/uncertainty';
 import { fingerprint, engineState, withLaterScans, resetScans } from '@/lib/reimport';
-import { sortNodules, approveBlockers, nextItem, unconfirmedOutlines, CENTRAL } from '@/lib/reviewChecks';
+import { sortNodules, approveBlockers, nextItem, unconfirmedOutlines, priorCoverage, CENTRAL } from '@/lib/reviewChecks';
 import EngineOffline from '@/components/EngineOffline';
 import ReviewHeader from '@/components/review/ReviewHeader';
 import ViewerPane from '@/components/review/ViewerPane';
@@ -299,7 +299,20 @@ function ReviewScan() {
 
   // Required step before approval: the AI misses central tumours (hilum / mediastinum), so Daniel confirms he checked there.
   const centralDone = !!scan?.central_checked_at;
-  const checks = approveBlockers(nodules, centralDone); // also blocks on accepted nodules without lobe / type
+  // Follow-ups: every prior nodule must be matched here or confirmed "Not found", recomputed live from Daniel's matches.
+  // Prior approved → its accepted nodules; "review anyway" (prior not approved) → the prior's AI findings not rejected.
+  const priorRows = priorQ.data?.scan?.review_status === 'Approved' ? (priorQ.data?.nodules || [])
+    : (priorQ.data?.nodules || []).filter((p) => p.status !== 'Rejected').map((p) => ({ ...p, status: 'Accepted' }));
+  const unaccounted = followup ? priorCoverage(priorRows, nodules) : [];
+  const checks = approveBlockers(nodules, centralDone, unaccounted); // also blocks on lobe / type and unaccounted prior nodules
+  // Opens the prior nodule's "Not found in this scan?" item, creating it if the engine didn't (Daniel matched differently).
+  const accountPrior = async (p) => {
+    const have = nodules.find((x) => x.kind === 'prior_not_found' && x.prior_label === p.nodule_label);
+    if (have) { select(have); return; }
+    const made = await Nodule.create(notFoundItemFor(scan, p));
+    await refresh();
+    setSelId(made.id); setMode(null); setClicks([]);
+  };
   const checkCentral = async (done) => {
     await markCentralChecked(scan, me, done);
     await qc.invalidateQueries({ queryKey: ['scan', id] });
@@ -440,7 +453,7 @@ function ReviewScan() {
           adding={mode === 'add'} onAdd={() => { setMode(mode === 'add' ? null : 'add'); setClicks([]); }}
           canAccept={canAccept} under4={under4} onAccept={accept}
           notFound={{ onConfirm: confirmNotFound, onHere: notFoundIsHere, onReopen: (n) => saveNodule(scan, n, { status: 'Pending', reject_reason: '', match_to_prior: '' }, me).then(refresh) }}
-          next={{ scan: nextForPatient, patient: nextPat, open: (s) => nav(`/review/${s.id}`), done: () => nav('/') }} checks={checks} unconfirmed={unconfirmedOutlines(nodules)} onSaveExit={saveExit}
+          next={{ scan: nextForPatient, patient: nextPat, open: (s) => nav(`/review/${s.id}`), done: () => nav('/') }} checks={checks} onAccountPrior={accountPrior} unconfirmed={unconfirmedOutlines(nodules)} onSaveExit={saveExit}
           waitForPrior={waitForPrior ? { prior: priorScanNow, open: () => nav(`/review/${priorScanNow.id}`), goOn: () => setForceStart(true) } : null}
           central={{ done: centralDone, by: scan.central_checked_by_initials, at: scan.central_checked_at, onCheck: () => checkCentral(true), onUndo: () => checkCentral(false), onMediastinal: hasMed ? () => setWin('mediastinal') : null }}
           onRejectClick={() => setRejectOpen(true)} onReject={reject} onOpenPrior={setPriorView} onNext={next} onApprove={approve} onReopen={reopen}

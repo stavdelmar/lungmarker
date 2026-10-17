@@ -16,16 +16,19 @@ export function preselect(rows, selected, seen) {
   return { selected: sel, seen: saw };
 }
 
-// What goes into one export: the given rows (optionally only pending ones), their scans,
-// and the trail events for those rows plus scan-level events (approval) of those scans.
-export function selectForExport({ scans, nodules, events, onlyPending }) {
+// What goes into one export: the given rows (optionally only pending ones), their scans, the rejected findings of
+// those scans not exported yet (trail only: AI draft + "Rejected: reason", never in Measurements), and the trail
+// events for all of these plus the scan-level events (approval, central check) of those scans.
+export function selectForExport({ scans, nodules, events, onlyPending, rejected = [] }) {
   const rows = onlyPending ? nodules.filter(isPendingExport) : nodules;
   const scanIds = new Set(rows.map((n) => n.scan));
-  const rowIds = new Set(rows.map((n) => n.id));
+  const rej = rejected.filter((n) => scanIds.has(n.scan) && isPendingExport(n));
+  const ids = new Set([...rows, ...rej].map((n) => n.id));
   return {
     scans: scans.filter((s) => scanIds.has(s.id)),
     nodules: rows,
-    events: events.filter((ev) => scanIds.has(ev.scan) && (!ev.nodule || rowIds.has(ev.nodule))),
+    rejected: rej,
+    events: events.filter((ev) => scanIds.has(ev.scan) && (!ev.nodule || ids.has(ev.nodule))),
   };
 }
 

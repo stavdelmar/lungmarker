@@ -18,15 +18,27 @@ export function missingFields(n) {
   return [!n.lobe && 'lobe', !n.type && 'type'].filter(Boolean);
 }
 
-export function approveBlockers(nodules, centralDone) {
+// Follow-ups: every approved prior nodule must be accounted for in this scan, recomputed live from Daniel's own
+// matches (not from the engine's not_found list): matched by a current nodule that isn't rejected, or confirmed
+// "Not found" (its not-found item accepted). Returns the prior nodules that are neither.
+export function priorCoverage(priorNodules, nodules) {
+  const prior = (priorNodules || []).filter((p) => p.status === 'Accepted' && (p.kind || 'nodule') === 'nodule' && p.nodule_label);
+  const matched = new Set(nodules.filter((n) => n.kind !== 'prior_not_found' && n.status !== 'Rejected' && n.match_to_prior).map((n) => n.match_to_prior));
+  const gone = new Set(nodules.filter((n) => n.kind === 'prior_not_found' && n.status === 'Accepted').map((n) => n.prior_label));
+  return prior.filter((p) => !matched.has(p.nodule_label) && !gone.has(p.nodule_label))
+    .sort((a, b) => num(a.nodule_label) - num(b.nodule_label));
+}
+
+export function approveBlockers(nodules, centralDone, unaccounted = []) {
   const decided = nodules.filter(isDecided).length;
   const missing = nodules.map((n) => ({ n, fields: missingFields(n) })).filter((m) => m.fields.length);
   const firstOpen = nodules.find((n) => !isDecided(n)) || missing[0]?.n || null;
-  const nodulesOk = decided === nodules.length && !missing.length;
+  const nodulesOk = decided === nodules.length && !missing.length && !unaccounted.length;
   // Every reason at once, so Daniel sees all that is left (e.g. "1 not decided yet · N3: no lobe").
   const why = [decided < nodules.length && `${nodules.length - decided} not decided yet`,
-    ...missing.map((m) => `${m.n.nodule_label}: no ${m.fields.join(' or ')}`)].filter(Boolean).join(' · ');
-  return { decided, total: nodules.length, missing, firstOpen, nodulesOk, centralDone: !!centralDone, ok: nodulesOk && !!centralDone, why };
+    ...missing.map((m) => `${m.n.nodule_label}: no ${m.fields.join(' or ')}`),
+    unaccounted.length && `prior ${unaccounted.map((p) => p.nodule_label).join(', ')} not matched or confirmed not found`].filter(Boolean).join(' · ');
+  return { decided, total: nodules.length, missing, unaccounted, firstOpen, nodulesOk, centralDone: !!centralDone, ok: nodulesOk && !!centralDone, why };
 }
 
 // "Next" (N): the next item still open after the current one (nodules in list order, then Central areas);
