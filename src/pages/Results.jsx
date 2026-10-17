@@ -10,7 +10,7 @@ import { buildWorkbook } from '@/lib/exportWorkbook';
 import { exportable } from '@/lib/exportRows';
 import { selectForExport, markExported, sortKey, exportStatus, preselect } from '@/lib/exportSelect';
 import SummaryCards from '@/components/results/SummaryCards';
-import PatientChanges from '@/components/results/PatientChanges';
+import PatientsOverTime from '@/components/results/PatientsOverTime';
 import ResultDetail from '@/components/results/ResultDetail';
 
 const { Scan, Nodule, EditEvent } = base44.entities;
@@ -28,6 +28,8 @@ export default function Results() {
   const [busy, setBusy] = useState(false);
   const [exportMsg, setExportMsg] = useState('');
   const [detail, setDetail] = useState(null);
+  const [tab, setTab] = useState(null);
+  const curTab = tab || (me.isReviewer ? 'sheet' : 'patients');
   const scansQ = useQuery({ queryKey: ['approvedScans'], queryFn: () => fetchAll(Scan, { review_status: 'Approved' }, 'patient_id') });
   const scans = scansQ.data || [];
   const shown = patient ? scans.filter((s) => s.patient_id === patient) : scans;
@@ -82,15 +84,21 @@ export default function Results() {
             <option value="">All patients</option>
             {patients.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
-          <button onClick={exportExcel} disabled={busy || !toExport.length}
+          {curTab === 'sheet' && <button onClick={exportExcel} disabled={busy || !toExport.length}
             className="h-8 px-3 rounded-md bg-slate-900 text-white text-sm flex items-center gap-2 hover:bg-slate-800 disabled:opacity-40">
             {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
             Export selected <span className="font-mono text-xs opacity-80">({toExport.length})</span>
-          </button>
+          </button>}
         </div>
       </div>
       {exportMsg && <p className="text-xs text-slate-500 -mt-3 text-right">{exportMsg}</p>}
       <SummaryCards scanIds={scans.map((s) => s.id)} scans={scans} settings={settings} />
+      <div className="flex gap-1 border-b border-slate-200">
+        {[['patients', 'Patients over time'], ['sheet', 'Sheet rows · export']].map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)} className={`px-3 py-2 text-sm -mb-px border-b-2 whitespace-nowrap ${curTab === k ? 'border-slate-900 font-medium text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>{label}</button>
+        ))}
+      </div>
+      {curTab === 'patients' ? <PatientsOverTime scans={shown} nodules={nodQ.data || []} base={settings.engine_base_url} /> : <>
       <div className="flex items-center gap-2">
         {[['all', 'All', nodules.length], ['new', 'Not exported', counts.new], ['changed', 'Changed since export', counts.changed]].map(([k, label, c]) => (
           <button key={k} onClick={() => setView(k)} className={`h-7 px-3 rounded-full text-xs border ${view === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}>
@@ -130,7 +138,7 @@ export default function Results() {
           </tbody>
         </table>
       </div>
-      <PatientChanges scans={shown} nodules={nodQ.data || []} />
+      </>}
       <ResultDetail n={detail} scan={detail && sMap[detail.scan]} base={settings.engine_base_url} onClose={() => setDetail(null)} />
     </div>
   );
