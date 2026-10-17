@@ -112,7 +112,7 @@ export default function Results() {
       <div className="flex flex-wrap items-center gap-2">
         {[['all', 'All', nodules.length], ['new', 'Not exported', counts.new], ['changed', 'Changed since export', counts.changed]].map(([k, label, c]) => (
           <button key={k} onClick={() => setView(k)} className={`h-7 px-3 rounded-full text-xs border ${view === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}>
-            {label} <span className="font-mono opacity-75">({c})</span>
+            {label} <span className="opacity-75">({c})</span>
           </button>
         ))}
         <span className="ml-auto text-xs text-slate-500">
