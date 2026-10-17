@@ -1,4 +1,5 @@
 import { groupOutlineEdits } from '@/lib/trailGroup';
+import { minutesOnScan } from '@/lib/minutes';
 export const MEAS_HEADERS = ['Patient ID', 'Scan date', 'Timepoint', 'Series #', 'Slice thickness (mm)', 'Nodule ID', 'Lobe', 'Slice #', 'Type', 'Long axis (mm)', 'Short axis (mm)', 'Mean diameter (mm)', 'Solid component (mm)', 'Volume (mm3)', 'Match to prior', 'Minutes on scan', 'Measured by', 'Notes'];
 export const TRAIL_HEADERS = ['Patient ID', 'Scan date', 'Timepoint', 'Nodule ID', 'Field', 'AI value', 'Previous value', 'New value', 'Changed by', 'Changed at'];
 export const ONE_DEC_COLS = [9, 10, 11, 12];
@@ -31,15 +32,16 @@ export function measurementRows(scans, nodules, events) {
   return nodules.filter((n) => sMap[n.scan] && exportable(n)).sort((a, b) => sortKey(sMap[a.scan], a).localeCompare(sortKey(sMap[b.scan], b))).map((n) => {
     const s = sMap[n.scan];
     if (isNotFound(n)) {
-      // A prior nodule not found on this follow-up: no measurements, Match to prior = "Not found", Daniel's note.
-      return [e(s.patient_id), d10(s.scan_date), e(s.timepoint), e(s.series_number), e(s.slice_thickness_mm), null, e(n.lobe), null, null,
-        null, null, null, null, null, 'Not found', e(s.minutes_on_scan), e(s.approved_by_initials), e(n.notes?.trim())];
+      // A prior nodule not found on this follow-up: its prior ID (Daniel, 17 Oct), no measurements,
+      // Match to prior = "Not found", Daniel's note.
+      return [e(s.patient_id), d10(s.scan_date), e(s.timepoint), e(s.series_number), e(s.slice_thickness_mm), e(n.prior_label), e(n.lobe), null, null,
+        null, null, null, null, null, 'Not found', e(minutesOnScan(s)), e(s.approved_by_initials), e(n.notes?.trim())];
     }
     return [
       e(s.patient_id), d10(s.scan_date), e(s.timepoint), e(s.series_number), e(s.slice_thickness_mm), e(n.nodule_label), e(n.lobe), e(n.slice_number), e(n.type),
       n1(n.long_axis_mm), n1(n.short_axis_mm), n1(n.mean_diameter_mm), n.type === 'Part-solid' ? n1(n.solid_component_mm) : null,
       n.outline_confirmed && n.volume_mm3 != null ? Math.round(n.volume_mm3) : null,
-      s.timepoint === 'Baseline' ? null : e(n.match_to_prior), e(s.minutes_on_scan), e(s.approved_by_initials),
+      s.timepoint === 'Baseline' ? null : e(n.match_to_prior), e(minutesOnScan(s)), e(s.approved_by_initials),
       e(n.notes?.trim()),  // Daniel's own text only
     ];
   });

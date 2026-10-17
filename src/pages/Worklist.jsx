@@ -9,6 +9,7 @@ import StatusBadge from '@/components/StatusBadge';
 import { RefreshCw, Loader2, ChevronRight, ChevronDown, CheckCircle2, Clock, Link2 } from 'lucide-react';
 import { fetchAll } from '@/lib/data';
 import { groupPatients, priorOf, isApproved, missingPriorLinks } from '@/lib/patients';
+import { minutesOnScan, openMinutes } from '@/lib/minutes';
 
 const { Scan } = base44.entities;
 const CHIPS = [['todo', 'To do'], ['done', 'Done'], ['all', 'All patients']];
@@ -123,7 +124,7 @@ export default function Worklist() {
       <div className="mt-3 bg-white border border-slate-200 rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
-            <tr>{['Patient ID', 'Scans', 'Progress', 'Minutes', ''].map((h, i) => <th key={i} className="text-left font-medium px-4 py-2.5">{h}</th>)}</tr>
+            <tr>{['Patient ID', 'Scans', 'Progress', 'Minutes on scan', ''].map((h, i) => <th key={i} className="text-left font-medium px-4 py-2.5">{h}</th>)}</tr>
           </thead>
           <tbody>
             {shown.map((p) => (
@@ -172,7 +173,7 @@ function PatientRows({ p, all, expanded, onToggle, onOpen }) {
             <td className="pl-11 pr-4 py-2">{s.timepoint}{s.id === p.next?.id && <span className="ml-2 text-[10.5px] text-teal-700 font-medium">next</span>}</td>
             <td className="px-4 font-mono text-xs text-slate-600">{String(s.scan_date || '').slice(0, 10)} · series {s.series_number ?? '—'} · {s.ai_findings_count ?? '—'} AI findings</td>
             <td className="px-4"><StatusBadge status={s.review_status || 'Not started'} />{s.approved_by_initials && <span className="ml-2 font-mono text-xs text-slate-500">{s.approved_by_initials}</span>}</td>
-            <td className="px-4 font-mono text-xs text-slate-600">{s.minutes_on_scan != null ? <>{s.minutes_on_scan}<span className="text-slate-400"> · {s.active_minutes ?? '—'} active</span></> : '—'}</td>
+            <td className="px-4 font-mono text-xs text-slate-600">{minutesOnScan(s) != null ? <>{minutesOnScan(s)}<span className="text-slate-400"> active · {openMinutes(s) ?? '—'} open</span></> : '—'}</td>
             <td className="px-4 text-xs">
               {s.timepoint !== 'Baseline' && (prior ? (
                 <span className={`inline-flex items-center gap-1 ${isApproved(prior) ? 'text-slate-500' : 'text-amber-700'}`}>

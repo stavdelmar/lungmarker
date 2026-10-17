@@ -92,15 +92,15 @@ bad = [f"{r['Nodule ID']} ({r['Timepoint'][:4]}) {r['Type']} solid={show(r['Soli
 check("Solid component empty for Solid/Ground-glass, filled for Part-solid", not bad,
       "; ".join(bad) or "; ".join(f"{r['Nodule ID']} ({r['Timepoint'][:4]}) {r['Type']} → {show(r['Solid component (mm)'])}" for r in rows))
 
-# 8 minutes
+# 8 minutes (Daniel, 17 Oct): Minutes on scan = ACTIVE work only; the time open stays in the trail, labelled
 scans = {s["engine_scan_id"]: s for s in state["scans"]}
 bad, ev = [], []
 for r in rows:
     s = scans[sid[r["Timepoint"]]]
-    exp = -(-s["total_seconds"] // 60)
-    (bad if r["Minutes on scan"] != exp or s.get("active_minutes") != -(-s["active_seconds"] // 60) else ev).append(
-        f"{r['Timepoint']}: open → approved {s['total_seconds']} s → {r['Minutes on scan']} min exported (active {s['active_minutes']} min kept for Results)")
-check("Minutes on scan = total time open → approved (Daniel's definition); active kept too", not bad, "; ".join(dict.fromkeys(bad or ev)))
+    exp, open_min = -(-s["active_seconds"] // 60), -(-s["total_seconds"] // 60)
+    (bad if r["Minutes on scan"] != exp or exp == open_min else ev).append(
+        f"{r['Timepoint']}: active {s['active_seconds']} s → {r['Minutes on scan']} min exported (open {s['total_seconds']} s = {open_min} min, not exported)")
+check("Minutes on scan = active minutes (no long breaks), not the time open", not bad, "; ".join(dict.fromkeys(bad or ev)))
 
 # 9 blanks: read the raw sheet XML (openpyxl turns an empty-text cell into None and would hide it)
 import zipfile
@@ -144,16 +144,20 @@ check("Edit trail: Daniel's changes (old → new, who, when)", any(t["Changed by
 central = [t for t in trail if t["Field"] == "central_areas_checked"]
 check("Edit trail: central areas (hilum / mediastinum) checked, per scan", len(central) == len(scans) and all(t["New value"] == "yes" and t["Changed by"] == "DR" for t in central),
       "; ".join(f"{t['Timepoint']}: {t['New value']} by {t['Changed by']} at {t['Changed at']}" for t in central) or "none")
+bad = [t["New value"] for t in approved if not re.search(r"Minutes on scan \d+ \(active work\) · open \d+ min in total", str(t["New value"]))]
+check("Edit trail: scan_approved shows active Minutes on scan and the time open, both labelled", approved and not bad, "; ".join(bad) or "; ".join(f"{t['Timepoint']}: {t['New value']}" for t in approved))
+_rm = [c.value for c in wb["Read me"]["A"] if c.value]
+check("Read me explains Minutes on scan (active) and Not found IDs", any("active work" in str(c) for c in _rm) and any("Not found" in str(c) and "prior scan" in str(c) for c in _rm), "; ".join(str(c)[:70] for c in _rm if "Minutes" in str(c) or "Not found" in str(c)) or "missing")
 check("Edit trail: who approved each scan", len(approved) == len(scans), "; ".join(f"{t['Timepoint']}: {t['New value']} by {t['Changed by']} at {t['Changed at']}" for t in approved))
 
 # prior nodules not found on the follow-up
 nfa = state["notFoundAfterInit"]
 check("Not-found items created from the engine list (+ hand-added prior), Pending for Daniel", sorted(x["prior"] for x in nfa) == ["N2", "N4"] and all(x["status"] == "Pending" and not x["match_to_prior"] for x in nfa),
       "; ".join(f"prior {x['prior']}: {x['status']}, {'engine not_found_in_current' if x['from_engine'] else 'added by hand on prior'}" for x in nfa) + " · prior N3 (rejected) not asked")
-ok = len(nf_rows) == 1 and nf_rows[0]["Nodule ID"] is None and nf_rows[0]["Lobe"] == "LLL" and nf_rows[0]["Timepoint"] == "Follow-up 1" \
+ok = len(nf_rows) == 1 and nf_rows[0]["Nodule ID"] == "N2" and nf_rows[0]["Lobe"] == "LLL" and nf_rows[0]["Timepoint"] == "Follow-up 1" \
     and all(nf_rows[0][c] is None for c in ["Slice #", "Type", "Long axis (mm)", "Short axis (mm)", "Mean diameter (mm)", "Solid component (mm)", "Volume (mm3)"]) \
     and nf_rows[0]["Notes"] == "Not seen on this scan, likely resolved" and nf_rows[0]["Measured by"] == "DR"
-check("Confirmed 'not found' → one row: Match to prior = Not found + Daniel's note, no sizes", ok,
+check("Confirmed 'not found' → one row: Nodule ID = prior ID (N2), Match to prior = Not found + Daniel's note, no sizes", ok,
       " | ".join(f"{k}={show(v)}" for k, v in (nf_rows[0].items() if nf_rows else [])) if nf_rows else "no row")
 check("Prior nodule marked 'it's here' is not exported as Not found", len(nf_rows) == 1, f"{len(nf_rows)} Not found row(s); prior N4 was marked present")
 

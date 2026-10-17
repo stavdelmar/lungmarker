@@ -69,5 +69,5 @@ const fields = trail.map((t) => t[4]);
 ok(!trail.some((t) => String(t[7]).includes('13.1')), 'old test edit (13.1) not in the export');
 ok(fields.filter((f) => f === 'scan_approved').length === 1 && fields.filter((f) => f === 'central_areas_checked').length === 1, `one approval + one central check (got ${fields.join(', ')})`);
 ok(fields.includes('scan_reset'), 'the reset itself is in the trail (honest)');
-ok(XLSX.utils.sheet_to_json(wb.Sheets.Measurements, { header: 1 })[1][15] === 7, 'Minutes on scan = the re-review only (7)');
+ok(XLSX.utils.sheet_to_json(wb.Sheets.Measurements, { header: 1 })[1][15] === 5, 'Minutes on scan = active minutes of the re-review only (300 s → 5)');
 console.log(fail ? `${fail} failed` : 'all pass');

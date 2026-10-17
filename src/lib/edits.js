@@ -1,5 +1,6 @@
 import { base44 } from '@/api/base44Client';
 import { meanOf } from '@/lib/geometry';
+import { minutesOnScan } from '@/lib/minutes';
 
 const AI_KEY = { lobe: 'lobe', type: 'type', slice_number: 'key_slice_number', long_axis_mm: 'long', short_axis_mm: 'short', solid_component_mm: 'solid', volume_mm3: 'volume', key_contour_px: 'contour', match_to_prior: 'match_label' };
 const SKIP = ['exported_at', 'changed_after_export', 'long_axis_px', 'short_axis_px', 'mean_diameter_mm', 'was_edited', 'outline_confirmed_by_initials', 'outline_confirmed_at', 'key_slice_z', 'volume_stale'];
@@ -64,8 +65,8 @@ export async function saveNodule(scan, given, patch, me, { source } = {}) {
   await base44.entities.EditEvent.bulkCreate(events);
 }
 // Approve a scan: stamps who/when and the timer's minutes, and logs it in the edit trail.
-// Minutes on scan (exported) = total time open in Review until approval, like Daniel's own log
-// (whole process). Active minutes are kept alongside for the fair-comparison view in Results.
+// Minutes on scan (exported, Daniel 17 Oct) = ACTIVE minutes: work without long breaks. The total time the scan
+// was open (opening → approval) is kept as total_minutes, shown on screen and in the trail, labelled "open".
 // Idempotent: a double click (or a second tab) must not approve twice or log "scan_approved" twice.
 // Calls for the same scan while one is running share it; an already-approved scan is left as it is.
 const approving = new Map();
@@ -82,11 +83,11 @@ async function doApprove(scan, secs, me, totalSecs) {
   scan = { ...scan, ...current };
   const total = Math.max(totalSecs ?? 0, secs);
   const patch = { review_status: 'Approved', approved_by_email: me.user.email, approved_by_initials: me.initials, approved_at: new Date().toISOString(),
-    active_seconds: secs, total_seconds: total, active_minutes: Math.ceil(secs / 60), minutes_on_scan: Math.ceil(total / 60) };
+    active_seconds: secs, total_seconds: total, active_minutes: Math.ceil(secs / 60), minutes_on_scan: Math.ceil(secs / 60), total_minutes: Math.ceil(total / 60) };
   await base44.entities.Scan.update(scan.id, patch);
-  await logEvent(scan, null, 'scan_approved', 'In review', `Approved · total ${patch.minutes_on_scan} min, active ${patch.active_minutes} min`, me);
+  await logEvent(scan, null, 'scan_approved', 'In review', `Approved · Minutes on scan ${patch.minutes_on_scan} (active work) · open ${patch.total_minutes} min in total`, me);
   // Re-approval after a reopen can change Minutes on scan → already-exported rows of this scan go out again.
-  const exported = scan.minutes_on_scan != null && scan.minutes_on_scan !== patch.minutes_on_scan
+  const exported = minutesOnScan(scan) != null && minutesOnScan(scan) !== patch.minutes_on_scan
     ? (await base44.entities.Nodule.filter({ scan: scan.id, status: 'Accepted' }, { limit: 500 })).items.filter((n) => n.exported_at) : [];
   if (exported.length) await base44.entities.Nodule.bulkUpdate(exported.map((n) => ({ id: n.id, changed_after_export: true })));
   return patch;

@@ -7,6 +7,7 @@ import NoduleSteps from '@/components/review/NoduleSteps';
 import NoduleHeader from '@/components/review/NoduleHeader';
 import NotFoundCard from '@/components/review/NotFoundCard';
 import { CENTRAL } from '@/lib/reviewChecks';
+import { minutesOnScan, openMinutes } from '@/lib/minutes';
 
 // The central-areas item, shown where a nodule's fields normally are.
 function CentralDetail({ central, locked, onAdd }) {
@@ -103,7 +104,7 @@ export default function NodulePanel(p) {
           <div className="space-y-2.5">
             <div className="flex items-center gap-2 text-sm">
               <Lock className="w-4 h-4 text-emerald-700 shrink-0" />
-              <span>Approved by <b className="font-mono">{scan.approved_by_initials}</b> · <span className="font-mono text-xs">{new Date(scan.approved_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}</span> · <span className="font-mono">{scan.minutes_on_scan}</span> min{scan.active_minutes != null && <> (active <span className="font-mono">{scan.active_minutes}</span>)</>}</span>
+              <span>Approved by <b className="font-mono">{scan.approved_by_initials}</b> · <span className="font-mono text-xs">{new Date(scan.approved_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}</span> · <span className="whitespace-nowrap"><span className="font-mono">{minutesOnScan(scan) ?? '—'}</span> min on scan</span> <span className="text-slate-500 whitespace-nowrap">(active){openMinutes(scan) != null && <> · <span className="font-mono">{openMinutes(scan)}</span> min open</>}</span></span>
               <Link to="/results" className="ml-auto text-xs text-teal-700 hover:underline whitespace-nowrap">Results →</Link>
               {isReviewer && <button onClick={onReopen} className="h-7 px-2.5 rounded-md border border-slate-300 bg-white text-xs hover:bg-slate-100">Reopen</button>}
             </div>

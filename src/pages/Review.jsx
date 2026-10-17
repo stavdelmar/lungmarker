@@ -336,7 +336,7 @@ function ReviewScan() {
     nav('/');
   };
   const resetTimer = async () => {
-    const was = `total ${Math.ceil(timer.getTotal() / 60)} min, active ${Math.ceil(timer.getSecs() / 60)} min`;
+    const was = `active ${Math.ceil(timer.getSecs() / 60)} min, open ${Math.ceil(timer.getTotal() / 60)} min`;
     await timer.reset();
     await logEvent(scan, null, 'timer_reset', was, '0 min', me);
     qc.invalidateQueries({ queryKey: ['scan', id] });
