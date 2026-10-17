@@ -18,7 +18,7 @@ const [a, b] = await Promise.all([approveScan(s1, 300, me, 400), approveScan(s1,
 ok(a === b, 'simultaneous calls share one approval');
 await approveScan(s1, 320, me, 420);
 ok((await approvals(s1)).length === 1, `scan_approved logged once (got ${(await approvals(s1)).length})`);
-ok((await Scan.get(s1.id)).minutes_on_scan === 7, 'minutes from the first approval kept (400 s → 7)');
+ok((await Scan.get(s1.id)).minutes_on_scan === 5, 'minutes from the first approval kept (active 300 s → 5)');
 // A reopened scan (back in review) can be approved again — that is a real second approval.
 await Scan.update(s1.id, { review_status: 'In review' });
 await approveScan(s1, 600, me, 700);

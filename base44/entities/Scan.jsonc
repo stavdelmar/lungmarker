@@ -41,7 +41,8 @@
       "default": 0
     },
     "minutes_on_scan": {
-      "type": "number"
+      "type": "number",
+      "description": "Exported Minutes on scan = active minutes (since 17 Oct; before that it held the total). Read via src/lib/minutes.js"
     },
     "approved_by_email": {
       "type": "string"
@@ -66,7 +67,11 @@
     },
     "active_minutes": {
       "type": "number",
-      "description": "Active time at approval, rounded up (idle > idle_pause_seconds and hidden tab not counted)"
+      "description": "Active time at approval, rounded up (idle > idle_pause_seconds and hidden tab not counted). = exported Minutes on scan (Daniel, 17 Oct)"
+    },
+    "total_minutes": {
+      "type": "number",
+      "description": "Time the scan was open, opening to approval, rounded up. Shown on screen and in the Edit trail as 'open', not exported as Minutes on scan"
     },
     "resume_item_id": {
       "type": "string",

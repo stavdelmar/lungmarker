@@ -26,11 +26,10 @@ export default function ReviewHeader({ scan, timer, showTimer, readOnly, prior, 
       {readOnly && <span className="text-xs text-slate-400">read-only</span>}
       {showTimer && (
         <span className="ml-auto text-xs text-slate-600">
-          Time on this scan: <span className="font-mono text-slate-900">{mmss(timer.total)}</span>
-          <span className="text-slate-400"> total · </span><span className="font-mono text-slate-900">{mmss(timer.secs)}</span><span className="text-slate-400"> active</span>
+          <span title="Minutes on scan (exported) = active work, without breaks. 'Open' = time the scan has been open, shown for transparency.">Minutes on scan: <span className="font-mono text-slate-900">{mmss(timer.secs)}</span><span className="text-slate-400"> active · </span><span className="font-mono text-slate-500">{mmss(timer.total)}</span><span className="text-slate-400"> open</span></span>
           {timer.totalPaused
             ? <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 text-[11px]" title="No input for 5 min: neither clock counts until you move the mouse, scroll or press a key">paused · idle</span>
-            : timer.paused && <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 text-[11px]" title="Active time pauses after a short idle; total keeps counting for 5 min">active paused</span>}
+            : timer.paused && <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 text-[11px]" title="Active time pauses after a short idle (not counted in Minutes on scan); open time keeps counting for 5 min">active paused</span>}
           {onResetTimer && (ask ? (
             <span className="ml-2 inline-flex items-center gap-1.5">
               <span className="text-slate-700">Reset both clocks to 0?</span>

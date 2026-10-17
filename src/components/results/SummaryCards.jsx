@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { fetchAll } from '@/lib/data';
 import { exportable } from '@/lib/exportRows';
 import { reviewBreakdown, patientTracks, noduleCounts, countsText } from '@/lib/patientTracks';
+import { minutesOnScan, openMinutes } from '@/lib/minutes';
 
 const { Nodule } = base44.entities;
 
@@ -17,13 +18,13 @@ function Card({ label, value, sub }) {
 }
 
 // Minutes per scan, averaged by Baseline / Follow-up, for both clocks.
-// total = open → approved (Daniel's own definition, fair vs his log); active = without idle time.
+// active = Minutes on scan (Daniel, 17 Oct: active work only) — compared with "before"; open = opening → approval.
 function avgMinutes(scans) {
   const acc = { b: { total: [], active: [] }, f: { total: [], active: [] } };
   scans.forEach((s) => {
     const k = s.timepoint === 'Baseline' ? 'b' : 'f';
-    if (s.minutes_on_scan != null) acc[k].total.push(s.minutes_on_scan);
-    if (s.active_minutes != null) acc[k].active.push(s.active_minutes);
+    if (openMinutes(s) != null) acc[k].total.push(openMinutes(s));
+    if (minutesOnScan(s) != null) acc[k].active.push(minutesOnScan(s));
   });
   const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
   return { b: { total: avg(acc.b.total), active: avg(acc.b.active) }, f: { total: avg(acc.f.total), active: avg(acc.f.active) } };
@@ -50,9 +51,9 @@ export default function SummaryCards({ scanIds, scans = [], settings }) {
     <div className="text-[12px]">
       <div className="text-slate-500">{label}</div>
       <div className="flex flex-wrap items-baseline gap-x-2">
-        <span><span className="font-mono text-base text-slate-900">{m(x.total)}</span> <span className="text-slate-500">total</span></span>
-        <span><span className="font-mono text-slate-700">{m(x.active)}</span> <span className="text-slate-500">active</span></span>
+        <span><span className="font-mono text-base text-slate-900">{m(x.active)}</span> <span className="text-slate-500">active</span></span>
         <span className="text-slate-500">vs <span className="font-mono">{before}</span> before</span>
+        <span className="text-slate-400">· <span className="font-mono">{m(x.total)}</span> open</span>
       </div>
     </div>
   );
@@ -77,7 +78,7 @@ export default function SummaryCards({ scanIds, scans = [], settings }) {
           {line('Baseline', t.b, settings.baseline_minutes_baseline)}
           {line('Follow-up', t.f, settings.baseline_minutes_followup)}
         </div>
-        <div className="text-[10.5px] text-slate-500 mt-1.5 leading-snug">Total = opening the scan to approval, the same as the lab's "Minutes on scan" (and what is exported). Active = without idle time.</div>
+        <div className="text-[10.5px] text-slate-500 mt-1.5 leading-snug">Active = Minutes on scan: active work without long breaks, as the lab defines it (exported and compared with before). Open = opening the scan to approval, shown for transparency.</div>
       </div>
     </div>
   );

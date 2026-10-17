@@ -1,3 +1,4 @@
+import { minutesOnScan } from '@/lib/minutes';
 // Patient-by-patient work: Daniel reviews all of one patient's scans in one sitting, Baseline first.
 // Pure functions (no Base44 calls) so the Worklist, the Review page and the tests share one rule.
 
@@ -31,7 +32,7 @@ export function groupPatients(scans) {
     const next = ordered.find((s) => !isApproved(s)) || null;
     const started = ordered.some((s) => s.review_status && s.review_status !== 'Not started');
     const status = approved === ordered.length ? 'Done' : started ? 'In progress' : 'Not started';
-    const minutes = ordered.reduce((m, s) => m + (s.minutes_on_scan || 0), 0);
+    const minutes = ordered.reduce((m, s) => m + (minutesOnScan(s) || 0), 0); // active minutes (Minutes on scan)
     return { patient_id, scans: ordered, approved, total: ordered.length, next, status, minutes, followups: ordered.filter((s) => tpRank(s.timepoint) > 0).length };
   });
   const rank = { 'In progress': 0, 'Not started': 1, Done: 2 };

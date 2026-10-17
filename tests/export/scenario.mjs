@@ -77,7 +77,7 @@ export async function runScenario() {
     const wbDay = buildWorkbook(XLSX, { ...sel, initials: 'DR', date: `2026-10-${day}` });
     const readme = XLSX.utils.sheet_to_json(wbDay.Sheets['Read me'], { header: 1 }).map((r) => r[0]).filter(Boolean).slice(1);
     await markExported([...sel.nodules, ...sel.rejected], `2026-10-${day}T18:00:00.000Z`);
-    daily.push({ day: `Oct ${day}`, rows: rows.map((r) => `${r[2]} ${r[5] ?? `(${r[14]})`}`), readme });
+    daily.push({ day: `Oct ${day}`, rows: rows.map((r) => `${r[2]} ${r[5]}${r[14] === 'Not found' ? ' (Not found)' : ''}`), readme });
   };
   await exportPending(15);
 
