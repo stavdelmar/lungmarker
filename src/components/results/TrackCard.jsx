@@ -7,6 +7,7 @@ import { boxOf } from '@/components/review/viewerUtils';
 // Expert inter-reader measurement noise.
 export const NOISE_LONG_MM = 2.3;
 const NOISE_VOL_PCT = 17;
+export const isBeyond = (t) => (t.long?.abs != null && Math.abs(t.long.abs) > NOISE_LONG_MM) || (t.volume?.pct != null && Math.abs(t.volume.pct) > NOISE_VOL_PCT);
 const sgn = (v, d = 1) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(v).toFixed(d)}`;
 const tpShort = (t) => (t === 'Baseline' ? 'Baseline' : t.replace('Follow-up ', 'FU '));
 
@@ -22,7 +23,7 @@ const outlineOf = (n) => (n.key_contour_px?.length >= 3 ? n.key_contour_px : nul
 export default function TrackCard({ track: t, timepoints, base, onOpen }) {
   const boxes = t.cells.map((n) => n && boxOf(n)).filter(Boolean);
   const half = boxes.length ? Math.max(...boxes.map((b) => Math.max(b[2] - b[0], b[3] - b[1]))) / 2 + 20 : undefined;
-  const beyond = (t.long?.abs != null && Math.abs(t.long.abs) > NOISE_LONG_MM) || (t.volume?.pct != null && Math.abs(t.volume.pct) > NOISE_VOL_PCT);
+  const beyond = isBeyond(t);
   const comparable = timepoints.length > 1 && t.notFoundAt == null && t.newAt == null;
   const noFollowUp = comparable && t.long?.abs == null;
   const first = t.cells.find(Boolean);

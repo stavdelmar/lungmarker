@@ -2,13 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { fetchAll } from '@/lib/data';
 import { exportable } from '@/lib/exportRows';
-import { reviewBreakdown } from '@/lib/patientTracks';
+import { reviewBreakdown, patientTracks, noduleCounts, countsText } from '@/lib/patientTracks';
 
 const { Nodule } = base44.entities;
 
 function Card({ label, value, sub }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-lg px-4 py-3">
+    <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 min-w-0">
       <div className="text-[11px] uppercase tracking-wider text-slate-500">{label}</div>
       <div className="font-mono text-2xl mt-1 tracking-tight">{value}</div>
       {sub && <div className="text-[11px] text-slate-500 mt-0.5">{sub}</div>}
@@ -37,39 +37,43 @@ export default function SummaryCards({ scanIds, scans = [], settings }) {
     enabled: scanIds.length > 0,
     queryFn: async () => {
       const all = await fetchAll(Nodule, { scan: { $in: scanIds } }, 'nodule_label');
+      // Same nodules as "Patients over time": one per track, not-found counted separately.
+      const counts = noduleCounts(patientTracks(scans, all).flatMap((p) => p.tracks));
       // Same rows as the table / Excel: accepted nodules ≥ 4 mm (plus everything Daniel rejected or added, for the breakdown).
-      return reviewBreakdown(all.filter((n) => n.status !== 'Accepted' || exportable(n)));
+      return { ...reviewBreakdown(all.filter((n) => n.status !== 'Accepted' || exportable(n))), counts };
     },
   });
   const d = q.data;
   const t = avgMinutes(scans);
   const m = (v) => (v == null ? '—' : Math.round(v));
   const line = (label, x, before) => (
-    <div className="flex items-baseline gap-2 text-[12px]">
-      <span className="w-16 text-slate-500">{label}</span>
-      <span className="font-mono text-base text-slate-900">{m(x.total)}</span><span className="text-slate-500">total</span>
-      <span className="font-mono text-slate-700">{m(x.active)}</span><span className="text-slate-500">active</span>
-      <span className="ml-auto text-slate-500">vs <span className="font-mono">{before}</span> before</span>
+    <div className="text-[12px]">
+      <div className="text-slate-500">{label}</div>
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <span><span className="font-mono text-base text-slate-900">{m(x.total)}</span> <span className="text-slate-500">total</span></span>
+        <span><span className="font-mono text-slate-700">{m(x.active)}</span> <span className="text-slate-500">active</span></span>
+        <span className="text-slate-500">vs <span className="font-mono">{before}</span> before</span>
+      </div>
     </div>
   );
   return (
-    <div className="grid grid-cols-4 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
       <Card label="Scans approved" value={scanIds.length} />
-      <Card label="Nodules measured" value={!scanIds.length ? 0 : d?.measured ?? (q.isError ? '—' : '…')}
-        sub={d && <>Volumes recorded <b className="font-mono text-slate-800">{d.volumes}</b> of <span className="font-mono">{d.measured}</span> <span className="text-slate-400">(only for confirmed outlines)</span></>} />
-      <div className="bg-white border border-slate-200 rounded-lg px-4 py-3">
+      <Card label="Nodules" value={!scanIds.length ? 0 : d ? d.counts.nodules : (q.isError ? '—' : '…')}
+        sub={d && <>{countsText(d.counts)}<br />Volumes recorded <b className="font-mono text-slate-800">{d.volumes}</b> of <span className="font-mono">{d.measured}</span> measurements <span className="text-slate-400">(only for confirmed outlines)</span></>} />
+      <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 min-w-0">
         <div className="text-[11px] uppercase tracking-wider text-slate-500">AI findings · reviewer's decision</div>
         {d ? (
-          <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[12px]">
+          <div className="mt-1.5 space-y-0.5 text-[12px]">
             {[['Accepted unchanged', d.unchanged], ['Edited', d.edited], ['Rejected', d.rejected], ['Added by reviewer', d.added]].map(([k, v]) => (
-              <div key={k} className="flex items-baseline justify-between gap-2"><span className="text-slate-500">{k}</span><span className="font-mono text-base text-slate-900">{v}</span></div>
+              <div key={k} className="flex items-baseline justify-between gap-2"><span className="text-slate-500 min-w-0">{k}</span><span className="font-mono text-base text-slate-900">{v}</span></div>
             ))}
           </div>
         ) : <div className="font-mono text-2xl mt-1">{!scanIds.length || q.isError ? '—' : '…'}</div>}
       </div>
-      <div className="bg-white border border-slate-200 rounded-lg px-4 py-3">
+      <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 min-w-0">
         <div className="text-[11px] uppercase tracking-wider text-slate-500">Avg minutes / scan</div>
-        <div className="mt-1.5 space-y-1">
+        <div className="mt-1.5 space-y-1.5">
           {line('Baseline', t.b, settings.baseline_minutes_baseline)}
           {line('Follow-up', t.f, settings.baseline_minutes_followup)}
         </div>

@@ -4,18 +4,32 @@ import { patientTracks } from '@/lib/patientTracks';
 import TrackCard from '@/components/results/TrackCard';
 import ChangeScatter from '@/components/results/ChangeScatter';
 import PatientSummaryTable from '@/components/results/PatientSummaryTable';
+import PatientToolbar, { FILTERS, largestChange } from '@/components/results/PatientToolbar';
 import ResultDetail from '@/components/results/ResultDetail';
 
 export default function PatientsOverTime({ scans, nodules, base }) {
   const [detail, setDetail] = useState(null);
-  const patients = patientTracks(scans, nodules).filter((p) => p.timepoints.length > 0);
-  if (!patients.length) return <p className="py-10 text-center text-sm text-slate-400">No approved scans yet.</p>;
+  const [q, setQ] = useState('');
+  const [active, setActive] = useState([]);
+  const [sort, setSort] = useState('change');
+  const all = patientTracks(scans, nodules).filter((p) => p.timepoints.length > 0);
+  if (!all.length) return <p className="py-10 text-center text-sm text-slate-400">No approved scans yet.</p>;
+  const patients = all
+    .filter((p) => p.patient_id.toLowerCase().includes(q.trim().toLowerCase()))
+    .filter((p) => FILTERS.every(([k, , test]) => !active.includes(k) || test(p)));
+  if (sort === 'change') patients.sort((a, b) => largestChange(b) - largestChange(a));
   const scanOf = (n) => n && scans.find((s) => s.id === n.scan);
   return (
     <div className="space-y-5">
+      <PatientToolbar q={q} setQ={setQ} active={active} setActive={setActive} sort={sort} setSort={setSort} shown={patients.length} total={all.length} />
+      {!patients.length ? (
+        <div className="py-10 text-center text-sm text-slate-500 bg-white border border-slate-200 rounded-lg">
+          No patients match this search and filters.
+          <button onClick={() => { setQ(''); setActive([]); }} className="ml-2 text-teal-700 hover:underline">Clear</button>
+        </div>
+      ) : <>
       <ChangeScatter patients={patients} />
       <PatientSummaryTable patients={patients} />
-      <p className="text-xs text-slate-500">Noise thresholds (expert inter-reader): long axis &gt; 2.3 mm or volume &gt; 17%.</p>
       {patients.map((p) => (
         <section key={p.patient_id} id={`patient-${p.patient_id}`} className="scroll-mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -31,6 +45,7 @@ export default function PatientsOverTime({ scans, nodules, base }) {
           {!p.tracks.length && <p className="text-xs text-slate-400">No accepted nodules.</p>}
         </section>
       ))}
+      </>}
       <ResultDetail n={detail} scan={scanOf(detail)} base={base} onClose={() => setDetail(null)} />
     </div>
   );

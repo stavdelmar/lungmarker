@@ -47,6 +47,12 @@ export function patientTracks(scans, nodules) {
   });
 }
 
+// Nodules = tracks (one per physical nodule across timepoints); not found = tracks lost on a follow-up.
+export function noduleCounts(tracks) {
+  return { nodules: tracks.length, notFound: tracks.filter((t) => t.notFoundAt != null).length };
+}
+export const countsText = (c) => `${c.nodules} nodule${c.nodules === 1 ? '' : 's'}${c.notFound ? ` · ${c.notFound} not found` : ''}`;
+
 // Results card: what Daniel did with the AI's findings, and how many volumes made it into the sheet.
 export function reviewBreakdown(nodules) {
   const ai = nodules.filter((n) => n.source === 'AI' && n.kind !== 'prior_not_found');

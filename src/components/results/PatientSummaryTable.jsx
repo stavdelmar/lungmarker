@@ -1,4 +1,4 @@
-import { volumeOf } from '@/lib/patientTracks';
+import { volumeOf, noduleCounts, countsText } from '@/lib/patientTracks';
 
 const sgn = (v) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(v).toFixed(1)}`;
 
@@ -17,7 +17,7 @@ export default function PatientSummaryTable({ patients }) {
             return (
               <tr key={p.patient_id} onClick={() => document.getElementById(`patient-${p.patient_id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer">
                 <td className="px-3 py-2 font-mono">{p.patient_id}</td>
-                <td className="px-3 font-mono">{p.tracks.length}</td>
+                <td className="px-3 text-xs whitespace-nowrap">{countsText(noduleCounts(p.tracks))}</td>
                 <td className="px-3 font-mono">{p.timepoints.length}</td>
                 <td className="px-3 font-mono">{big == null ? '—' : `${sgn(big)} mm`}</td>
                 <td className="px-3 text-xs">{cells.filter((n) => volumeOf(n) != null).length} of {cells.length}</td>
