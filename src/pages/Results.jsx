@@ -94,7 +94,7 @@ export default function Results() {
       {exportMsg && <p className="text-xs text-slate-500 -mt-3 text-right">{exportMsg}</p>}
       <SummaryCards scanIds={scans.map((s) => s.id)} scans={scans} settings={settings} />
       <div className="flex gap-1 border-b border-slate-200">
-        {[['patients', 'Patients over time'], ['sheet', 'Sheet rows · export']].map(([k, label]) => (
+        {[['sheet', 'Sheet rows · export'], ['patients', 'Patients over time']].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} className={`px-3 py-2 text-sm -mb-px border-b-2 whitespace-nowrap ${curTab === k ? 'border-slate-900 font-medium text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>{label}</button>
         ))}
       </div>
