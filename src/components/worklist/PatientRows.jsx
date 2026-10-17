@@ -3,7 +3,7 @@ import StatusBadge from '@/components/StatusBadge';
 import { priorOf, isApproved } from '@/lib/patients';
 import { minutesOnScan, openMinutes } from '@/lib/minutes';
 
-const sub = 'text-left font-medium px-4 py-1.5 text-[10.5px] uppercase tracking-wider text-slate-400';
+const sub = 'text-left font-medium px-4 py-1.5 text-[11px] uppercase tracking-wider text-slate-400';
 
 // One patient: a clickable summary row (same action as its button), then — when expanded — its scans in order.
 export default function PatientRows({ p, all, expanded, onToggle, onOpen, showMinutes }) {
@@ -46,7 +46,7 @@ export default function PatientRows({ p, all, expanded, onToggle, onOpen, showMi
                 const prior = priorOf(s, all);
                 return (
                   <tr key={s.id} onClick={() => onOpen(s)} className="border-t border-slate-100 hover:bg-teal-50/40 cursor-pointer">
-                    <td className="pl-11 pr-4 py-2 whitespace-nowrap">{s.timepoint}{s.id === p.next?.id && <span className="ml-2 text-[10.5px] text-teal-700 font-medium">next</span>}</td>
+                    <td className="pl-11 pr-4 py-2 whitespace-nowrap">{s.timepoint}{s.id === p.next?.id && <span className="ml-2 text-[11px] text-teal-700 font-medium">next</span>}</td>
                     <td className="px-4 font-mono text-xs text-slate-600">{String(s.scan_date || '').slice(0, 10) || '—'}</td>
                     <td className="px-4 font-mono text-xs text-slate-600">{s.series_number ?? '—'}</td>
                     <td className="px-4 font-mono text-xs text-slate-600">{s.ai_findings_count ?? '—'}</td>

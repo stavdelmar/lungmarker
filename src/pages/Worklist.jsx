@@ -95,7 +95,7 @@ export default function Worklist() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Worklist</h1>
-          <p className="text-xs text-slate-500 mt-1 font-mono">
+          <p className="text-[11px] uppercase tracking-wider text-slate-500 mt-1">
             {scansQ.data ? `${patients.filter((p) => p.status === 'Done').length} of ${patients.length} patients done · ${approvedScans} of ${all.length} scans approved · ${followups} follow-ups` : '…'}
           </p>
         </div>

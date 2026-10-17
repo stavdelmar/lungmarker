@@ -91,12 +91,13 @@
     @apply bg-background text-foreground font-body;
   }
 
-  /* Table column titles */
+  /* Table column titles: same style as the Dashboard card labels (e.g. "Scans approved") */
   thead th {
-    font-family: 'Barlow Semi Condensed', ui-sans-serif, system-ui, sans-serif;
-    font-weight: 600;
-    font-size: 12px;
-    letter-spacing: 0.06em;
+    font-family: var(--font-body);
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
   }
 
   /* Review panel: button labels stay on one line and never touch the border. */
