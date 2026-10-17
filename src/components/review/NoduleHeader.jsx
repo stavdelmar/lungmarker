@@ -3,8 +3,9 @@ import StatusBadge from '@/components/StatusBadge';
 import { fmtMaybe } from '@/components/review/viewerUtils';
 
 // Header of the current-nodule card: "N1 · LUL · 4.6 × 4.6 mm · 1 of 4" with ‹ › to step through the list.
-export default function NoduleHeader({ sel, nodules, onSelect }) {
-  const i = nodules.findIndex((n) => n.id === sel.id);
+export default function NoduleHeader({ sel: current, nodules, onSelect }) {
+  const i = nodules.findIndex((n) => n.id === current.id);
+  const sel = nodules[i] || current; // same saved values as the list
   const nf = sel.kind === 'prior_not_found';
   const go = (d) => { const t = nodules[i + d]; if (t) onSelect(t); };
   const arrow = 'w-7 h-7 rounded-md border border-slate-300 bg-white grid place-items-center hover:bg-slate-50 disabled:opacity-30';

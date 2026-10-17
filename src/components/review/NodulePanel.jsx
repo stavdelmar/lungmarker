@@ -1,5 +1,7 @@
 import { Plus, Check, X, ChevronRight, Lock, ScanSearch, CircleCheck, Circle, LogOut, ArrowLeft, Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import NoduleChips from '@/components/review/NoduleChips';
 import NoduleList, { DoubtPills } from '@/components/review/NoduleList';
 import NoduleSteps from '@/components/review/NoduleSteps';
 import NoduleHeader from '@/components/review/NoduleHeader';
@@ -41,7 +43,7 @@ export default function NodulePanel(p) {
   const { scan, nodules, selId, sel, onSelect, locked, isReviewer, onAdd, adding, formProps, prior, followup, canAccept, under4, onAccept, onRejectClick, onNext, onReject, onOpenPrior,
     checks, onApprove, onReopen, central, notFound, next, waitForPrior, onSaveExit, unconfirmed = [] } = p;
   const approved = scan.review_status === 'Approved';
-  const line = 'w-full flex items-center gap-2 text-sm rounded px-1.5 py-1 hover:bg-white text-left';
+  const [listView, setListView] = useState(false);
   return (
     <aside className="w-[35%] min-w-[420px] border-l border-slate-200 bg-slate-50 flex flex-col min-h-0">
       <div className="h-10 shrink-0 flex items-center px-4 border-b border-slate-200 bg-white">
@@ -61,12 +63,17 @@ export default function NodulePanel(p) {
           </div>
         ) : (
           <>
-            <div className="shrink-0 h-48 mx-3 mt-3 rounded-lg border border-slate-200 bg-white overflow-y-auto shadow-sm">
-              <NoduleList nodules={nodules} selId={selId} onSelect={onSelect} central={central} />
-            </div>
-            <div className="flex-1 min-h-0 m-3 rounded-lg border border-slate-200 bg-white flex flex-col overflow-hidden shadow-sm">
+            {(sel || selId === CENTRAL) && !listView ? (
+              <NoduleChips nodules={nodules} selId={selId} onSelect={onSelect} central={central} onList={() => setListView(true)} />
+            ) : (
+              <div className="shrink-0 bg-white border-b border-slate-200">
+                {(sel || selId === CENTRAL) && <button onClick={() => setListView(false)} className="w-full px-3 py-1 text-xs text-teal-700 hover:bg-teal-50 text-right">Compact view</button>}
+                <NoduleList nodules={nodules} selId={selId} onSelect={onSelect} central={central} />
+              </div>
+            )}
+            <div className="m-3 rounded-lg border border-slate-200 bg-white shadow-sm">
               {sel && <NoduleHeader sel={sel} nodules={nodules} onSelect={onSelect} />}
-              <div className="flex-1 overflow-y-auto">
+              <div>
                 {!sel && selId !== CENTRAL && <div className="p-4 text-sm text-slate-500">Select a nodule in the list.</div>}
                 {selId === CENTRAL && <CentralDetail central={central} locked={locked} onAdd={onAdd} />}
                 {sel && sel.kind === 'prior_not_found' && (
@@ -106,34 +113,17 @@ export default function NodulePanel(p) {
             {isReviewer && next && !next.scan && <div className="text-xs text-slate-500">All scans of <span className="font-mono">{scan.patient_id}</span> approved.</div>}
           </div>
         ) : isReviewer && !waitForPrior ? (
-          <div className="space-y-1.5">
-            <div className="flex items-center">
-              <span className="text-[11px] uppercase tracking-wider text-slate-500">Before approving</span>
-              <button onClick={onSaveExit} className="ml-auto h-7 px-2.5 rounded-md border border-slate-300 bg-white text-xs hover:bg-slate-100 flex items-center gap-1" title="Stops the timer, keeps everything, Continue brings you back here"><LogOut className="w-3.5 h-3.5" />Save &amp; exit</button>
-            </div>
-            <button className={line} onClick={() => checks.firstOpen && onSelect(checks.firstOpen)}>
-              {checks.nodulesOk ? <CircleCheck className="w-4 h-4 text-emerald-600 shrink-0" /> : <Circle className="w-4 h-4 text-slate-300 shrink-0" />}
-              <span className="text-slate-800">Every nodule decided</span>
-              <span className={`ml-auto text-xs ${checks.nodulesOk ? 'text-slate-500 font-mono' : 'text-amber-700'}`}>{checks.nodulesOk ? `${checks.decided}/${checks.total}` : `${checks.why} →`}</span>
-            </button>
-            <button className={line} onClick={() => onSelect({ id: CENTRAL })}>
-              {central.done ? <CircleCheck className="w-4 h-4 text-emerald-600 shrink-0" /> : <Circle className="w-4 h-4 text-slate-300 shrink-0" />}
-              <span className="text-slate-800">Central areas checked</span>
-              <span className={`ml-auto text-xs ${central.done ? 'text-slate-500 font-mono' : 'text-amber-700'}`}>{central.done ? central.by : 'not checked →'}</span>
-            </button>
-            {/* Soft reminder, never blocks: Daniel's rule records a volume only for a confirmed outline. */}
-            {unconfirmed.length > 0 && (
-              <div className="flex items-start gap-2 rounded-md bg-sky-50 border border-sky-200 px-2.5 py-1.5 text-[12px] text-sky-950">
-                <Info className="w-4 h-4 text-sky-700 shrink-0 mt-px" />
-                <span className="flex-1">
-                  {unconfirmed.length === 1 ? <><b className="font-mono">{unconfirmed[0].nodule_label}</b> has</> : <><b className="font-mono">{unconfirmed.map((n) => n.nodule_label).join(', ')}</b> have</>} no confirmed outline, so no volume will be recorded{unconfirmed.length === 1 ? ' for it' : ''}. You can still approve.
-                </span>
-                <button onClick={() => onSelect(unconfirmed[0])} className="shrink-0 text-sky-800 font-medium hover:underline whitespace-nowrap">Go to {unconfirmed[0].nodule_label} →</button>
-              </div>
-            )}
-            <button onClick={onApprove} disabled={!checks.ok} className="mt-1 w-full h-10 rounded-md bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-40">
-              {checks.ok ? 'Approve scan' : 'Approve scan (finish both steps first)'}
-            </button>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="flex-1 min-w-0 truncate">
+              {checks.ok ? <span className="text-emerald-700">All decided · central checked</span> : <>
+                {!checks.nodulesOk && <button className="text-amber-700 hover:underline" onClick={() => checks.firstOpen && onSelect(checks.firstOpen)}>{checks.total - checks.decided} not decided</button>}
+                {!checks.nodulesOk && !central.done && ' · '}
+                {!central.done && <button className="text-amber-700 hover:underline" onClick={() => onSelect({ id: CENTRAL })}>central not checked</button>}
+              </>}
+              {unconfirmed.length > 0 && <button className="text-sky-700 hover:underline" title="No volume will be recorded for these. You can still approve." onClick={() => onSelect(unconfirmed[0])}> · {unconfirmed.length} outline{unconfirmed.length === 1 ? '' : 's'} unconfirmed</button>}
+            </span>
+            <button onClick={onSaveExit} className="h-8 px-2.5 rounded-md border border-slate-300 bg-white hover:bg-slate-100 flex items-center gap-1" title="Stops the timer, keeps everything, Continue brings you back here"><LogOut className="w-3.5 h-3.5" />Save &amp; exit</button>
+            <button onClick={onApprove} disabled={!checks.ok} className="h-8 px-3 rounded-md bg-slate-900 text-white font-medium hover:bg-slate-800 disabled:opacity-40">Approve →</button>
           </div>
         ) : waitForPrior ? null : <div className="text-xs text-slate-500 text-center">Read-only access</div>}
       </div>
