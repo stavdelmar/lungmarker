@@ -72,6 +72,24 @@
       "type": "string",
       "description": "Where 'Save & exit' left off: the selected nodule id (or 'central'); Continue reopens there."
     },
+    "ai_fingerprint": {
+      "type": "string",
+      "description": "Fingerprint of the engine's findings.json when the AI draft was copied in (first opening). If the engine output changes later, Review warns and an admin can re-import."
+    },
+    "ai_imported_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "review_round": {
+      "type": "number",
+      "default": 0,
+      "description": "Starts at 0; each reset for re-import adds 1. Edit-trail rows carry the round they were written in; the export uses the current round."
+    },
+    "reset_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last reset for re-import from the engine. The export uses only edit-trail rows from this time on (the trail itself is never deleted)."
+    },
     "first_opened_at": {
       "type": "string",
       "format": "date-time"

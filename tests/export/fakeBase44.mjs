@@ -11,6 +11,7 @@ function entity() {
     async update(id, p) { const r = { ...rows.get(id), ...p, updated_date: now() }; rows.set(id, r); return { ...r }; },
     async bulkUpdate(list) { return Promise.all(list.map(({ id, ...p }) => this.update(id, p))); },
     async get(id) { return { ...rows.get(id) }; },
+    async delete(id) { const had = rows.delete(id); return { deleted: had ? 1 : 0 }; },
     async filter(q, { sort } = {}) {
       let items = [...rows.values()].filter((r) => match(r, q)).map((r) => ({ ...r }));
       if (sort) items.sort((a, b) => String(a[sort] ?? '').localeCompare(String(b[sort] ?? ''), undefined, { numeric: true }));

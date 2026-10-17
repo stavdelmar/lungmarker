@@ -1,4 +1,5 @@
 import { MEAS_HEADERS, TRAIL_HEADERS, ONE_DEC_COLS, measurementRows, trailRows } from '@/lib/exportRows';
+import { liveEvents } from '@/lib/reimport';
 
 // Scan date column (B) as a real Excel date shown yyyy-mm-dd, so it sorts and filters as a date.
 function datesToExcel(XLSX, ws, nRows) {
@@ -29,7 +30,8 @@ export function timeZoneLabel(at = new Date()) {
 
 // Builds the 3-sheet export workbook. Used by the Export page and by tests/export.
 // nodules = the Accepted nodules of the selected (approved) scans.
-export function buildWorkbook(XLSX, { scans, nodules, events, initials, date }) {
+export function buildWorkbook(XLSX, { scans, nodules, events: allEvents, initials, date }) {
+  const events = liveEvents(scans, allEvents); // a scan reset for re-import starts its trail again
   const meas = measurementRows(scans, nodules, events);
   const ws = XLSX.utils.aoa_to_sheet([MEAS_HEADERS, ...meas]);
   datesToExcel(XLSX, ws, meas.length);

@@ -37,6 +37,11 @@
     "edited_by_initials": {
       "type": "string"
     },
+    "review_round": {
+      "type": "number",
+      "default": 0,
+      "description": "The scan's review round when this row was written (see Scan.review_round)."
+    },
     "edited_at": {
       "type": "string",
       "format": "date-time"

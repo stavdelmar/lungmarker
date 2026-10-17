@@ -7,6 +7,7 @@ import { useSettings } from '@/hooks/useAppData';
 import { useMe } from '@/hooks/useMe';
 import EngineOffline from '@/components/EngineOffline';
 import UserRoles from '@/components/settings/UserRoles';
+import TestData from '@/components/settings/TestData';
 
 const input = 'mt-1 w-full h-9 px-2.5 rounded-md border border-slate-200 bg-white text-sm focus:outline-none focus:border-teal-600';
 
@@ -52,6 +53,10 @@ export default function Settings() {
           <label className="text-sm">Idle pause (seconds)<input type="number" className={`${input} font-mono`} value={f.idle_pause_seconds} onChange={set('idle_pause_seconds')} /></label>
         </div>
         <button onClick={save} disabled={saving} className="h-9 px-4 rounded-md bg-slate-900 text-white text-sm hover:bg-slate-800 disabled:opacity-60">{saving ? 'Saving…' : 'Save settings'}</button>
+      </section>
+      <section className="space-y-2">
+        <h2 className="text-sm font-medium">Test data · re-import from engine</h2>
+        <TestData base={settings.engine_base_url} />
       </section>
       <section className="space-y-2">
         <h2 className="text-sm font-medium">Users</h2>

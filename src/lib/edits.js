@@ -17,6 +17,7 @@ function eventBase(scan, nodule, me) {
   return {
     scan: scan.id, nodule: nodule?.id || '', engine_scan_id: scan.engine_scan_id, nodule_label: nodule?.nodule_label || (nodule?.prior_label ? `prior ${nodule.prior_label}` : ''),
     edited_by_email: me.user.email, edited_by_initials: me.initials, edited_at: new Date().toISOString(),
+    review_round: scan.review_round || 0, // a reset for re-import starts a new round; the export uses the current one
   };
 }
 

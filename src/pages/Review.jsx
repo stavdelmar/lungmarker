@@ -15,6 +15,7 @@ import { lenMm, meanOf, findingPatch, sliceStepMm, volumeFromContours, sliceCont
 import { brushEdit, lassoToPoly } from '@/lib/maskEdit';
 import { MIN_LONG_AXIS_MM } from '@/lib/exportRows';
 import { notFoundNote } from '@/lib/uncertainty';
+import { fingerprint, engineState, withLaterScans, resetScans } from '@/lib/reimport';
 import { sortNodules, approveBlockers, nextItem, unconfirmedOutlines, CENTRAL } from '@/lib/reviewChecks';
 import EngineOffline from '@/components/EngineOffline';
 import ReviewHeader from '@/components/review/ReviewHeader';
@@ -108,7 +109,8 @@ function ReviewScan() {
         await initNodules(scan, findings, priorQ.data?.nodules || []);
         if (scan.timepoint !== 'Baseline') await initNotFound(scan, findQ.data.match_summary, priorQ.data?.nodules || []);
       }
-      await Scan.update(scan.id, { review_status: 'In review', first_opened_at: scan.first_opened_at || new Date().toISOString(), ai_findings_count: findings.length, engine_version: health.data?.engine_version || scan.engine_version || '' });
+      await Scan.update(scan.id, { review_status: 'In review', first_opened_at: scan.first_opened_at || new Date().toISOString(), ai_findings_count: findings.length,
+        ai_fingerprint: fingerprint(findQ.data), ai_imported_at: new Date().toISOString(), engine_version: health.data?.engine_version || scan.engine_version || '' });
       qc.invalidateQueries({ queryKey: ['nodules', id] }); qc.invalidateQueries({ queryKey: ['scan', id] });
     })();
   }, [scan, me.isReviewer, nodQ.data, findQ.data, health.isLoading, priorQ.data, waitForPrior]);
@@ -323,6 +325,21 @@ function ReviewScan() {
     await logEvent(scan, null, 'timer_reset', was, '0 min', me);
     qc.invalidateQueries({ queryKey: ['scan', id] });
   };
+  // The engine's output for this scan changed after its AI draft was copied in (e.g. a new outline rule on S3).
+  const engineChanged = !approved && engineState(scan, findQ.data) === 'changed';
+  const [askReimport, setAskReimport] = useState(false);
+  const reimport = async () => {
+    setBusy(true);
+    try {
+      const affected = withLaterScans([scan], patientQ.data || [scan]);
+      const { scans: engineScans = [] } = await engine.scans(base).catch(() => ({}));
+      await resetScans(affected, me, { engineScans, reason: 'engine output changed' });
+      await timer.reset(); // the open page's clocks would otherwise write the old minutes back
+      qc.invalidateQueries(); // everything about these scans is new
+      initRef.current = false; setSelId(null); setAskReimport(false);
+    } catch (e) { setNotice(`Re-import failed: ${e.message}`); }
+    setBusy(false);
+  };
   const reopen = async () => {
     await Scan.update(scan.id, { review_status: 'In review' });
     await logEvent(scan, null, 'scan_approved', 'Approved', 'Reopened', me);
@@ -380,6 +397,19 @@ function ReviewScan() {
       <ReviewHeader scan={scan} timer={timer} showTimer={me.isReviewer && !approved && !waitForPrior} onResetTimer={resetTimer} readOnly={locked} prior={scan.timepoint !== 'Baseline' ? (priorScanNow || null) : undefined} onOpenPrior={() => priorScanNow && nav(`/review/${priorScanNow.id}`)} />
       <div className="flex flex-1 min-h-0">
         <div className="w-[65%] flex flex-col min-w-0 bg-neutral-950">
+          {engineChanged && (
+            <div className="px-3 py-2 text-xs bg-amber-400 text-amber-950 border-b border-amber-500 flex items-center gap-3">
+              <span className="flex-1"><b>The AI results for this scan changed on the engine</b> since it was set up{scan.ai_imported_at ? ` (${new Date(scan.ai_imported_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })})` : ''}. The nodules here are the old version.</span>
+              {me.isAdmin ? (askReimport ? (
+                <span className="flex items-center gap-2 whitespace-nowrap">
+                  <span>Discard this scan's review{withLaterScans([scan], patientQ.data || [scan]).length > 1 ? ' and the later scans of this patient' : ''}?</span>
+                  <button onClick={reimport} disabled={busy} className="h-7 px-2.5 rounded bg-amber-950 text-amber-50 font-medium disabled:opacity-50">Re-import</button>
+                  <button onClick={() => setAskReimport(false)} className="h-7 px-2.5 rounded border border-amber-800">Cancel</button>
+                </span>
+              ) : <button onClick={() => setAskReimport(true)} className="h-7 px-2.5 rounded bg-amber-950 text-amber-50 font-medium whitespace-nowrap">Re-import from engine…</button>)
+                : <span className="whitespace-nowrap">Ask an admin to re-import it (Settings → Test data).</span>}
+            </div>
+          )}
           {notice && <div className="px-3 py-2 text-xs bg-rose-950/60 text-rose-100 border-b border-rose-900 flex">{notice}<button className="ml-auto underline" onClick={() => setNotice('')}>Dismiss</button></div>}
           {metaQ.isError || findQ.isError || (!base) ? (
             <div className="p-6"><EngineOffline dark onRetry={retry} message={metaQ.error?.message || findQ.error?.message || 'Engine URL is not set (Settings).'} /></div>
