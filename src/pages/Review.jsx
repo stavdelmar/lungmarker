@@ -15,6 +15,7 @@ import { lenMm, meanOf, findingPatch, sliceStepMm, volumeFromContours, sliceCont
 import { brushEdit, lassoToPoly } from '@/lib/maskEdit';
 import { MIN_LONG_AXIS_MM } from '@/lib/exportRows';
 import { notFoundNote } from '@/lib/uncertainty';
+import { matchesToCheck } from '@/lib/matchChecks';
 import { fingerprint, engineState, withLaterScans, resetScans } from '@/lib/reimport';
 import { sortNodules, approveBlockers, nextItem, unconfirmedOutlines, priorCoverage, CENTRAL } from '@/lib/reviewChecks';
 import EngineOffline from '@/components/EngineOffline';
@@ -453,7 +454,7 @@ function ReviewScan() {
           adding={mode === 'add'} onAdd={() => { setMode(mode === 'add' ? null : 'add'); setClicks([]); }}
           canAccept={canAccept} under4={under4} onAccept={accept}
           notFound={{ onConfirm: confirmNotFound, onHere: notFoundIsHere, onReopen: (n) => saveNodule(scan, n, { status: 'Pending', reject_reason: '', match_to_prior: '' }, me).then(refresh) }}
-          next={{ scan: nextForPatient, patient: nextPat, open: (s) => nav(`/review/${s.id}`), done: () => nav('/') }} checks={checks} onAccountPrior={accountPrior} unconfirmed={unconfirmedOutlines(nodules)} onSaveExit={saveExit}
+          next={{ scan: nextForPatient, patient: nextPat, open: (s) => nav(`/review/${s.id}`), done: () => nav('/') }} checks={checks} matchChecks={followup ? matchesToCheck(nodules, priorNodules) : []} onAccountPrior={accountPrior} unconfirmed={unconfirmedOutlines(nodules)} onSaveExit={saveExit}
           waitForPrior={waitForPrior ? { prior: priorScanNow, open: () => nav(`/review/${priorScanNow.id}`), goOn: () => setForceStart(true) } : null}
           central={{ done: centralDone, by: scan.central_checked_by_initials, at: scan.central_checked_at, onCheck: () => checkCentral(true), onUndo: () => checkCentral(false), onMediastinal: hasMed ? () => setWin('mediastinal') : null }}
           onRejectClick={() => setRejectOpen(true)} onReject={reject} onOpenPrior={setPriorView} onNext={next} onApprove={approve} onReopen={reopen}

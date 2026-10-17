@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Columns2 } from 'lucide-react';
+import { Columns2, AlertTriangle } from 'lucide-react';
+import { matchWarnings } from '@/lib/matchChecks';
 import CropView from '@/components/CropView';
 import { engine } from '@/api/engine';
 import { fmtMaybe, boxOf } from '@/components/review/viewerUtils';
@@ -21,6 +22,8 @@ export default function MatchCompare({ sel, nodules, prior, aiSuggest, locked, o
   const matchedBy = (label) => nodules.find((n) => n.id !== sel.id && n.match_to_prior === label)?.nodule_label;
   const half = pn ? Math.max(sizeOf(pn), sizeOf(sel)) : null;
   const diff = pn && sel.long_axis_mm != null && pn.long_axis_mm != null ? sel.long_axis_mm - pn.long_axis_mm : null;
+  // Soft check of the pair on screen (the candidate before saving, or the recorded match): never blocks.
+  const warns = cand ? matchWarnings(sel, cand, priorNodules, nodules) : [];
   const rest = [...priorNodules].filter((x) => x.nodule_label !== cand).sort((a, b) => num(a.nodule_label) - num(b.nodule_label));
   const card = (n, title, scanId) => (
     <div className="flex-1 min-w-0">
@@ -42,6 +45,13 @@ export default function MatchCompare({ sel, nodules, prior, aiSuggest, locked, o
             {diff != null && <span>Change in long axis: <b className="font-mono">{diff >= 0 ? '+' : '−'}{fmtMaybe(Math.abs(diff))} mm</b></span>}
             <button onClick={() => onOpenPrior(pn)} className="ml-auto text-teal-700 hover:underline flex items-center gap-1"><Columns2 className="w-3.5 h-3.5" />Open prior side by side</button>
           </div>
+          {warns.length > 0 && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-[12px] text-amber-950">
+              <div className="flex items-center gap-1.5 font-semibold"><AlertTriangle className="w-3.5 h-3.5" />Check this match{cand === recorded ? '' : ` before choosing ${cand}`}</div>
+              <ul className="mt-1 ml-5 list-disc space-y-0.5">{warns.map((x) => <li key={x.kind}>{x.text}</li>)}</ul>
+              <div className="mt-1 text-[11px] text-amber-800">Only a hint: if you are sure, keep it.</div>
+            </div>
+          )}
         </>
       )}
       {!locked && (

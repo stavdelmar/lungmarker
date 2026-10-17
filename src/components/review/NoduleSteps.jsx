@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Check, X, ChevronRight } from 'lucide-react';
 import Step from '@/components/review/Step';
 import MatchCompare from '@/components/review/MatchCompare';
+import { matchWarnings } from '@/lib/matchChecks';
 import { DoubtPills } from '@/components/review/NoduleList';
 import { VolumeConfirm, Measurements, Notes } from '@/components/review/NoduleForm';
 import { fmtMaybe } from '@/components/review/viewerUtils';
@@ -25,7 +26,8 @@ export default function NoduleSteps({ sel, nodules, locked, followup, canAccept,
   const state = (i) => (i === 3 && !followup ? 'skipped' : done[i - 1] ? 'done' : i === first ? 'current' : 'todo');
   const toggle = (i) => setOpenStep(cur === i ? 0 : i);
   const advance = (fn) => { fn(); setOpenStep(null); };
-  const match = sel.match_to_prior === 'N/A' ? 'New nodule' : sel.match_to_prior ? `Same as prior ${sel.match_to_prior}` : '';
+  const matchCheck = matchWarnings(sel, sel.match_to_prior, prior?.priorNodules || [], nodules).length > 0;
+  const match = sel.match_to_prior === 'N/A' ? 'New nodule' : sel.match_to_prior ? `Same as prior ${sel.match_to_prior}${matchCheck ? ' · ⚠ check' : ''}` : '';
   const sp = { locked, onSave: (patch) => { setOpenStep(null); return formProps.onSave(patch); } };
   return (
     <div className="p-4">

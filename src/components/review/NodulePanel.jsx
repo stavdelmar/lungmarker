@@ -41,7 +41,7 @@ function CentralDetail({ central, locked, onAdd }) {
 
 export default function NodulePanel(p) {
   const { scan, nodules, selId, sel, onSelect, locked, isReviewer, onAdd, adding, formProps, prior, followup, canAccept, under4, onAccept, onRejectClick, onNext, onReject, onOpenPrior,
-    checks, onApprove, onReopen, central, notFound, next, waitForPrior, onSaveExit, unconfirmed = [], onAccountPrior } = p;
+    checks, onApprove, onReopen, central, notFound, next, waitForPrior, onSaveExit, unconfirmed = [], onAccountPrior, matchChecks = [] } = p;
   const approved = scan.review_status === 'Approved';
   const [listView, setListView] = useState(false);
   return (
@@ -122,6 +122,7 @@ export default function NodulePanel(p) {
                 {!checks.nodulesOk && !central.done && ' · '}
                 {!central.done && <button className="text-amber-700 hover:underline" onClick={() => onSelect({ id: CENTRAL })}>central not checked</button>}
               </>}
+              {matchChecks.length > 0 && <button className="text-amber-700 hover:underline" title="A match looks implausible (lobe, size or position). Only a hint, you can still approve." onClick={() => onSelect(matchChecks[0])}> · {matchChecks.length} match{matchChecks.length === 1 ? '' : 'es'} to check</button>}
               {unconfirmed.length > 0 && <button className="text-sky-700 hover:underline" title="No volume will be recorded for these. You can still approve." onClick={() => onSelect(unconfirmed[0])}> · {unconfirmed.length} outline{unconfirmed.length === 1 ? '' : 's'} unconfirmed</button>}
             </span>
             <button onClick={onSaveExit} className="h-8 px-2.5 rounded-md border border-slate-300 bg-white hover:bg-slate-100 flex items-center gap-1" title="Stops the timer, keeps everything, Continue brings you back here"><LogOut className="w-3.5 h-3.5" />Save &amp; exit</button>
