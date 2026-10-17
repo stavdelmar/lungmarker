@@ -114,7 +114,7 @@ function ReviewScan() {
         scanPatch: { first_opened_at: scan.first_opened_at || new Date().toISOString(), ai_findings_count: findings.length,
           ai_fingerprint: fingerprint(findQ.data), ai_imported_at: new Date().toISOString(), engine_version: health.data?.engine_version || scan.engine_version || '' } });
       qc.invalidateQueries({ queryKey: ['nodules', id] }); qc.invalidateQueries({ queryKey: ['scan', id] });
-    })();
+    })().catch((e) => setNotice(`Setting up this scan failed: ${e.message}. Reload the page to try again.`));
   }, [scan, me.isReviewer, nodQ.data, findQ.data, health.isLoading, priorQ.data, waitForPrior]);
 
   // Selecting the "Central areas" item switches to the mediastinal window (if the scan has it); selecting a nodule
@@ -136,12 +136,22 @@ function ReviewScan() {
   }, [nodules.length, scan?.review_status, !!meta, nodQ.isFetching]);
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['nodules', id] });
-  const save = async (patch, opts) => {
-    if (!sel) return;
+  // A failed save must never leave the screen showing something that isn't saved: say so, drop the unsaved
+  // outline / axes on screen and reload what Base44 has. attempt() returns true when the step went through.
+  const failed = (what, e) => {
+    setNotice(`${what} failed: ${e?.message || e}. The screen now shows what is saved; please try again.`);
+    const d = sel ? { key_contour_px: sel.key_contour_px || [], long_axis_px: sel.long_axis_px, short_axis_px: sel.short_axis_px } : null;
+    draftRef.current = d; setDraft(d);
+    refresh(); qc.invalidateQueries({ queryKey: ['scan', id] });
+  };
+  const attempt = async (what, fn) => {
+    try { await fn(); return true; } catch (e) { failed(what, e); return false; }
+  };
+  const save = (patch, opts) => (!sel ? Promise.resolve(false) : attempt('Saving', async () => {
     await saveNodule(scan, sel, patch, me, opts);
     if ('match_to_prior' in patch && sel.kind !== 'prior_not_found') await syncNotFound(sel, patch.match_to_prior);
     await refresh();
-  };
+  }));
   // A "prior Nx not found?" item resolves itself when Daniel matches a nodule in this scan to Nx (and reopens if he undoes it).
   const syncNotFound = async (n, label) => {
     const items = (nodQ.data || []).filter((x) => x.kind === 'prior_not_found');
@@ -194,7 +204,7 @@ function ReviewScan() {
       // Same path as Erase / Draw: axes and volume follow the moved points at once, and Undo works.
       const nid = sel.id;
       editSlice(sel, sel.key_slice_z, d.key_contour_px, 'points moved by hand; axes and volume recomputed')
-        .then(() => { if (refineOk && sel.engine_finding_id) recomputeFromPolygon(nid, d.key_contour_px); });
+        .then((ok) => { if (ok && refineOk && sel.engine_finding_id) recomputeFromPolygon(nid, d.key_contour_px); });
     } else {
       draftRef.current = d; setDraft(d); // keep the moved axis end on screen while it saves
       save({ [h.kind]: d[h.kind], [h.kind === 'long_axis_px' ? 'long_axis_mm' : 'short_axis_mm']: lenMm(d[h.kind], sp) });
@@ -232,17 +242,22 @@ function ReviewScan() {
       const nd = { key_contour_px: patch.key_contour_px ?? newPoly, long_axis_px: patch.long_axis_px ?? draftRef.current?.long_axis_px, short_axis_px: patch.short_axis_px ?? draftRef.current?.short_axis_px };
       draftRef.current = nd; setDraft(nd);
     }
-    undoRef.current.push({ id: n.id, prev: Object.fromEntries(OUTLINE_FIELDS.map((f) => [f, n[f] ?? null])) });
+    const entry = { id: n.id, prev: Object.fromEntries(OUTLINE_FIELDS.map((f) => [f, n[f] ?? null])) };
+    undoRef.current.push(entry);
     if (undoRef.current.length > 30) undoRef.current.shift();
-    await saveNodule(scan, n, patch, me, { source });
-    await refresh();
+    const ok = await attempt('Saving the outline', async () => { await saveNodule(scan, n, patch, me, { source }); await refresh(); });
+    if (!ok) undoRef.current = undoRef.current.filter((u) => u !== entry); // nothing was saved, so nothing to undo
+    return ok;
   };
   const undo = async () => {
     const last = undoRef.current.pop();
     if (!last) { setNotice('Nothing to undo.'); return; }
-    const fresh = await Nodule.get(last.id);
-    await saveNodule(scan, fresh, last.prev, me, { source: 'undo', ...(last.opts || {}) });
-    await refresh();
+    const ok = await attempt('Undo', async () => {
+      const fresh = await Nodule.get(last.id);
+      await saveNodule(scan, fresh, last.prev, me, { source: 'undo', ...(last.opts || {}) });
+      await refresh();
+    });
+    if (!ok) undoRef.current.push(last); // still there to undo after the retry
   };
   // ---- Key slice chosen by the reviewer (Daniel, 18 Oct): he measures on the slice with the sharpest edges.
   // Every slice keeps its outline, so the volume and "outline confirmed" stay; the axes are measured on the new
@@ -253,10 +268,11 @@ function ReviewScan() {
     if (!patch) return;
     const keep = { outline_confirmed: !!n.outline_confirmed };
     if (n.id === sel?.id) { const nd = { key_contour_px: patch.key_contour_px, long_axis_px: patch.long_axis_px, short_axis_px: patch.short_axis_px }; draftRef.current = nd; setDraft(nd); }
-    undoRef.current.push({ id: n.id, prev: { ...Object.fromEntries(OUTLINE_FIELDS.map((f) => [f, n[f] ?? null])), ...keep }, opts: { quiet: KEY_QUIET } });
+    const entry = { id: n.id, prev: { ...Object.fromEntries(OUTLINE_FIELDS.map((f) => [f, n[f] ?? null])), ...keep }, opts: { quiet: KEY_QUIET } };
+    undoRef.current.push(entry);
     if (undoRef.current.length > 30) undoRef.current.shift();
-    await saveNodule(scan, n, { ...patch, ...keep }, me, { source: 'key slice set by hand', quiet: KEY_QUIET });
-    await refresh();
+    const ok = await attempt('Setting the key slice', async () => { await saveNodule(scan, n, { ...patch, ...keep }, me, { source: 'key slice set by hand', quiet: KEY_QUIET }); await refresh(); });
+    if (!ok) undoRef.current = undoRef.current.filter((u) => u !== entry); // nothing was saved, so nothing to undo
   };
   const keyOptions = useMemo(() => (sel ? keySliceOptions(sel, findingsById[sel.engine_finding_id]?.contours, sp) : []), [sel, findingsById, sp]);
   const sliceNum = (zz) => meta?.slices?.find((s) => s.z === zz)?.slice_number ?? zz + 1;
@@ -282,7 +298,7 @@ function ReviewScan() {
     }
   };
 
-  const createAdded = async (geom) => {
+  const createAdded = (geom) => attempt('Adding the nodule', async () => {
     const maxN = Math.max(0, ...nodules.map((n) => parseInt(String(n.nodule_label).slice(1), 10) || 0));
     const label = `N${maxN + 1}`;
     const rec = await Nodule.create({
@@ -293,7 +309,7 @@ function ReviewScan() {
     });
     await logEvent(scan, rec, 'added', '', label, me);
     await refresh(); setSelId(rec.id);
-  };
+  });
 
   const quickRefine = (pt, label) => runEngine(async () => {
     const f = await engine.refine(base, sid, { finding_id: sel.engine_finding_id || null, z: sel.key_slice_z, points: [{ x: pt[0], y: pt[1], label }], polygon_px: draftRef.current?.key_contour_px });
@@ -340,20 +356,26 @@ function ReviewScan() {
   const accept = async () => {
     if (!canAccept) return;
     if (isNF) return confirmNotFound(sel, sel.notes || notFoundNote(sel));
-    await save({ status: 'Accepted', reject_reason: '' }); next();
+    if (await save({ status: 'Accepted', reject_reason: '' })) next();
   };
   // Prior nodule not found: Daniel confirms it (exported as Match to prior = "Not found" + his note), or says it is here.
   const confirmNotFound = async (n, note) => {
-    await saveNodule(scan, n, { status: 'Accepted', reject_reason: '', match_to_prior: 'Not found', notes: note ?? n.notes ?? '' }, me);
-    await refresh(); next();
+    const ok = await attempt('Saving', async () => {
+      await saveNodule(scan, n, { status: 'Accepted', reject_reason: '', match_to_prior: 'Not found', notes: note ?? n.notes ?? '' }, me);
+      await refresh();
+    });
+    if (ok) next();
   };
   const notFoundIsHere = async (n) => {
-    await saveNodule(scan, n, { status: 'Rejected', reject_reason: 'Seen in this scan', match_to_prior: '' }, me);
-    await refresh();
+    const ok = await attempt('Saving', async () => {
+      await saveNodule(scan, n, { status: 'Rejected', reject_reason: 'Seen in this scan', match_to_prior: '' }, me);
+      await refresh();
+    });
+    if (!ok) return;
     setMode('add'); setClicks([]);
     setNotice(`Mark prior ${n.prior_label} on this scan: ${refineOk ? 'click it' : '4 clicks for its axes'}, then set its Match to prior to ${n.prior_label}. If the AI already marked it under another number, select that nodule and set Match to prior to ${n.prior_label} instead.`);
   };
-  const reject = async (reason) => { await save({ status: 'Rejected', reject_reason: reason }); next(); };
+  const reject = async (reason) => { if (await save({ status: 'Rejected', reject_reason: reason })) next(); };
 
   // Required step before approval: the AI misses central tumours (hilum / mediastinum), so Daniel confirms he checked there.
   const centralDone = !!scan?.central_checked_at;
@@ -367,18 +389,20 @@ function ReviewScan() {
   const accountPrior = async (p) => {
     const have = nodules.find((x) => x.kind === 'prior_not_found' && x.prior_label === p.nodule_label);
     if (have) { select(have); return; }
-    const made = await Nodule.create(notFoundItemFor(scan, p));
-    await refresh();
+    let made;
+    if (!(await attempt('Creating the "not found?" item', async () => { made = await Nodule.create(notFoundItemFor(scan, p)); await refresh(); }))) return;
     setSelId(made.id); setMode(null); setClicks([]);
   };
   const checkCentral = async (done) => {
-    await markCentralChecked(scan, me, done);
-    await qc.invalidateQueries({ queryKey: ['scan', id] });
-    if (done) { const o = nodules.find((n) => !(n.status === 'Accepted' || n.status === 'Rejected')); if (o) select(o); }
+    const ok = await attempt('Saving the central-areas check', async () => {
+      await markCentralChecked(scan, me, done);
+      await qc.invalidateQueries({ queryKey: ['scan', id] });
+    });
+    if (ok && done) { const o = nodules.find((n) => !(n.status === 'Accepted' || n.status === 'Rejected')); if (o) select(o); }
   };
   const approve = async () => {
     if (!checks.ok) return;
-    await approveScan(scan, timer.getSecs(), me, timer.getTotal());
+    if (!(await attempt('Approving', () => approveScan(scan, timer.getSecs(), me, timer.getTotal())))) return;
     qc.invalidateQueries({ queryKey: ['scan', id] }); qc.invalidateQueries({ queryKey: ['approvedScans'] }); qc.invalidateQueries({ queryKey: ['resultNodules'] });
     qc.invalidateQueries({ queryKey: ['patientScans', scan.patient_id] }); qc.invalidateQueries({ queryKey: ['scans'] });
   };
@@ -388,14 +412,13 @@ function ReviewScan() {
   // Save & exit: saves the clocks (closing the page stops them), remembers the selected item, back to the worklist.
   const saveExit = async () => {
     timer.save();
-    await Scan.update(scan.id, { resume_item_id: selId || '' });
+    if (!(await attempt('Save & exit', () => Scan.update(scan.id, { resume_item_id: selId || '' })))) return;
     qc.invalidateQueries({ queryKey: ['scans'] });
     nav('/');
   };
   const resetTimer = async () => {
     const was = `active ${Math.ceil(timer.getSecs() / 60)} min, open ${Math.ceil(timer.getTotal() / 60)} min`;
-    await timer.reset();
-    await logEvent(scan, null, 'timer_reset', was, '0 min', me);
+    if (!(await attempt('Resetting the timer', async () => { await timer.reset(); await logEvent(scan, null, 'timer_reset', was, '0 min', me); }))) return;
     qc.invalidateQueries({ queryKey: ['scan', id] });
   };
   // The engine's output for this scan changed after its AI draft was copied in (e.g. a new outline rule on S3).
@@ -414,8 +437,7 @@ function ReviewScan() {
     setBusy(false);
   };
   const reopen = async () => {
-    await Scan.update(scan.id, { review_status: 'In review' });
-    await logEvent(scan, null, 'scan_approved', 'Approved', 'Reopened', me);
+    if (!(await attempt('Reopening', async () => { await Scan.update(scan.id, { review_status: 'In review' }); await logEvent(scan, null, 'scan_approved', 'Approved', 'Reopened', me); }))) return;
     qc.invalidateQueries({ queryKey: ['scan', id] });
   };
 
@@ -511,7 +533,7 @@ function ReviewScan() {
         <NodulePanel scan={scan} nodules={nodules} selId={selId} sel={sel} onSelect={select} locked={locked} isReviewer={me.isReviewer} followup={followup}
           adding={mode === 'add'} onAdd={() => { setMode(mode === 'add' ? null : 'add'); setClicks([]); }}
           canAccept={canAccept} under4={under4} onAccept={accept}
-          notFound={{ onConfirm: confirmNotFound, onHere: notFoundIsHere, onReopen: (n) => saveNodule(scan, n, { status: 'Pending', reject_reason: '', match_to_prior: '' }, me).then(refresh) }}
+          notFound={{ onConfirm: confirmNotFound, onHere: notFoundIsHere, onReopen: (n) => attempt('Saving', async () => { await saveNodule(scan, n, { status: 'Pending', reject_reason: '', match_to_prior: '' }, me); await refresh(); }) }}
           next={{ scan: nextForPatient, patient: nextPat, open: (s) => nav(`/review/${s.id}`), done: () => nav('/') }} checks={checks} matchChecks={followup ? matchesToCheck(nodules, priorNodules) : []} onAccountPrior={accountPrior} unconfirmed={unconfirmedOutlines(nodules)} onSaveExit={saveExit}
           waitForPrior={waitForPrior ? { prior: priorScanNow, open: () => nav(`/review/${priorScanNow.id}`), goOn: () => setForceStart(true) } : null}
           central={{ done: centralDone, by: scan.central_checked_by_initials, at: scan.central_checked_at, onCheck: () => checkCentral(true), onUndo: () => checkCentral(false), onMediastinal: hasMed ? () => setWin('mediastinal') : null }}

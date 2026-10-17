@@ -7,13 +7,12 @@ import { useSettings } from '@/hooks/useAppData';
 import { useMe } from '@/hooks/useMe';
 import { fetchAll, fmt1, fmtDateTime } from '@/lib/data';
 import { buildWorkbook } from '@/lib/exportWorkbook';
-import { exportable } from '@/lib/exportRows';
+import { exportable, MEAS_HEADERS } from '@/lib/exportRows';
 import { selectForExport, markExported, sortKey, exportStatus, preselect } from '@/lib/exportSelect';
 import SummaryCards from '@/components/results/SummaryCards';
 import PatientsOverTime from '@/components/results/PatientsOverTime';
 import Performance from '@/components/results/Performance';
 import ReportBuilder from '@/components/results/ReportBuilder';
-import { MEAS_HEADERS } from '@/lib/exportRows';
 import ResultDetail from '@/components/results/ResultDetail';
 import { minutesOnScan, openMinutes } from '@/lib/minutes';
 
@@ -91,9 +90,6 @@ export default function Results() {
     <div className="px-8 py-6 max-w-[1400px] w-full mx-auto space-y-5">
       <div className="flex items-end justify-between gap-4">
         <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
-        <div className="flex items-center gap-3">
-
-        </div>
       </div>
       {exportMsg && <p className="text-xs text-slate-500 -mt-3 text-right">{exportMsg}</p>}
       <SummaryCards scans={scans} />

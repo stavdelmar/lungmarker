@@ -11,5 +11,4 @@ export async function fetchAll(entity, query, sort = 'created_date') {
 }
 
 export const fmt1 = (v) => (v == null || v === '' ? '—' : Number(v).toFixed(1));
-export const fmtDate = (v) => (v ? String(v).slice(0, 10) : '—');
 export const fmtDateTime = (v) => (v ? new Date(v).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '—');

@@ -1,11 +1,12 @@
 import { groupOutlineEdits } from '@/lib/trailGroup';
 import { minutesOnScan } from '@/lib/minutes';
+import { tpRank } from '@/lib/patients';
 export const MEAS_HEADERS = ['Patient ID', 'Scan date', 'Timepoint', 'Series #', 'Slice thickness (mm)', 'Nodule ID', 'Lobe', 'Slice #', 'Type', 'Long axis (mm)', 'Short axis (mm)', 'Mean diameter (mm)', 'Solid component (mm)', 'Volume (mm3)', 'Match to prior', 'Minutes on scan', 'Measured by', 'Notes'];
 export const TRAIL_HEADERS = ['Patient ID', 'Scan date', 'Timepoint', 'Nodule ID', 'Field', 'AI value', 'Previous value', 'New value', 'Changed by', 'Changed at'];
 export const ONE_DEC_COLS = [9, 10, 11, 12];
 
 const FIELD_NAMES = { long_axis_mm: 'long axis', short_axis_mm: 'short axis', outline: 'outline', lobe: 'lobe', type: 'type', volume_mm3: 'volume', solid_component_mm: 'solid component', slice_number: 'slice' };
-// Blank = null, so the Excel cell is really empty (not an empty-text cell). toCsv writes null as nothing.
+// Blank = null, so the Excel cell is really empty (not an empty-text cell).
 const n1 = (v) => (v == null || v === '' ? null : Number(Number(v).toFixed(1)));
 const e = (v) => (v == null || v === '' ? null : v);
 const d10 = (v) => (v ? String(v).slice(0, 10) : null);
@@ -24,10 +25,9 @@ export const isNotFound = (n) => n.kind === 'prior_not_found';
 export const exportable = (n) => isNotFound(n) || Number(n.long_axis_mm) >= MIN_LONG_AXIS_MM;
 
 // Group rows by scan (patient, date, Baseline before Follow-up 1, …), then N1, N2, … within the scan.
-const tpRank = (t = '') => (t === 'Baseline' ? 0 : parseInt(String(t).replace(/\D/g, ''), 10) || 99);
 export function sortKey(s, n) { return `${s.patient_id}|${d10(s.scan_date)}|${String(tpRank(s.timepoint)).padStart(3, '0')}|${n && isNotFound(n) ? 'z' : 'a'}${String(n?.nodule_label || n?.prior_label || '').replace(/\d+/, (d) => d.padStart(4, '0'))}`; }
 
-export function measurementRows(scans, nodules, events) {
+export function measurementRows(scans, nodules) {
   const sMap = Object.fromEntries(scans.map((s) => [s.id, s]));
   return nodules.filter((n) => sMap[n.scan] && exportable(n)).sort((a, b) => sortKey(sMap[a.scan], a).localeCompare(sortKey(sMap[b.scan], b))).map((n) => {
     const s = sMap[n.scan];
@@ -87,9 +87,4 @@ export function trailRows(scans, events, nodules = []) {
     return [...head(s, ev.nodule_label), ev.source ? `${ev.field} (${ev.source})` : e(ev.field), e(ev.ai_value), e(ev.old_value), e(ev.new_value), e(ev.edited_by_initials), ts(ev.edited_at)];
   });
   return [...drafts, ...changes];
-}
-
-export function toCsv(headers, rows) {
-  const q = (v) => { if (v == null) return ''; const s = typeof v === 'number' ? (Number.isInteger(v) ? String(v) : v.toFixed(1)) : String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-  return [headers, ...rows].map((r) => r.map(q).join(',')).join('\n');
 }

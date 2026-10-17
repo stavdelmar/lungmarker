@@ -1,4 +1,3 @@
-export { lenMm } from '@/lib/geometry';
 export const fmtMaybe = (v) => (v == null ? '—' : Number(v).toFixed(1));
 
 // Bounding box of a nodule's key-slice outline (or its axes), in image pixels.

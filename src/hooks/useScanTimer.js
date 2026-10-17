@@ -68,8 +68,12 @@ export function useScanTimer({ scanId, initial, initialTotal, enabled, idleSecon
     if (!scanId || loaded.current !== scanId) return;
     const t = totalNow();
     if (secsRef.current === savedRef.current && t === savedTotal.current) return;
-    savedRef.current = secsRef.current; savedTotal.current = t;
-    base44.entities.Scan.update(scanId, { active_seconds: secsRef.current, total_seconds: t });
+    const prevSaved = savedRef.current, prevTotal = savedTotal.current, secs = secsRef.current;
+    savedRef.current = secs; savedTotal.current = t;
+    // A failed save (e.g. offline for a moment) is retried on the next tick instead of being forgotten
+    // (unless a later save has already gone out).
+    base44.entities.Scan.update(scanId, { active_seconds: secs, total_seconds: t })
+      .catch(() => { if (savedRef.current === secs && savedTotal.current === t) { savedRef.current = prevSaved; savedTotal.current = prevTotal; } });
   }, [scanId]);
 
   useEffect(() => {

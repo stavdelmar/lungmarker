@@ -42,21 +42,6 @@ export function Measurements({ n, locked, onSave }) {
   );
 }
 
-export function MatchToPrior({ n, locked, priorLabels, aiSuggest, onSave }) {
-  return (
-    <div className={`rounded-md border p-2.5 ${!n.match_to_prior && !locked ? 'border-amber-300 bg-amber-50/50' : 'border-slate-200 bg-slate-50/60'}`}>
-      <SelectField label="Match to prior (needed before Accept)" value={n.match_to_prior} disabled={locked} placeholder="Not recorded"
-        options={[...priorLabels, { value: 'N/A', label: 'N/A (new nodule)' }]} onChange={(v) => onSave({ match_to_prior: v })} />
-      {aiSuggest && (
-        <div className="flex items-center justify-between mt-1.5 text-[11.5px] text-slate-600">
-          <span>AI suggests <b className="font-mono">{aiSuggest.label}</b>{aiSuggest.conf != null && <>, confidence <span className="font-mono">{aiSuggest.conf}%</span></>}</span>
-          {!locked && n.match_to_prior !== aiSuggest.label && <button onClick={() => onSave({ match_to_prior: aiSuggest.label })} className="text-teal-700 hover:underline">Use suggestion</button>}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function Notes({ n, locked, onSave }) {
   const [notes, setNotes] = useState(n.notes || '');
   useEffect(() => setNotes(n.notes || ''), [n.id, n.notes]);

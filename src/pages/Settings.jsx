@@ -18,6 +18,7 @@ export default function Settings() {
   const [f, setF] = useState(null);
   const [test, setTest] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState('');
   useEffect(() => { if (settings) setF(settings); }, [settings]);
 
   if (!me.loading && !me.isAdmin) return <div className="p-8 text-sm text-slate-500">Settings are available to admins only.</div>;
@@ -28,10 +29,12 @@ export default function Settings() {
     try { setTest({ ok: await engine.health(f.engine_base_url) }); } catch (e) { setTest({ err: e.message }); }
   };
   const save = async () => {
-    setSaving(true);
-    const data = { engine_base_url: f.engine_base_url.trim(), baseline_minutes_baseline: Number(f.baseline_minutes_baseline), baseline_minutes_followup: Number(f.baseline_minutes_followup), idle_pause_seconds: Number(f.idle_pause_seconds) };
-    if (settings.id) await base44.entities.AppSettings.update(settings.id, data); else await base44.entities.AppSettings.create(data);
-    await qc.invalidateQueries({ queryKey: ['settings'] });
+    setSaving(true); setSaveErr('');
+    const data = { engine_base_url: String(f.engine_base_url || '').trim(), baseline_minutes_baseline: Number(f.baseline_minutes_baseline), baseline_minutes_followup: Number(f.baseline_minutes_followup), idle_pause_seconds: Number(f.idle_pause_seconds) };
+    try {
+      if (settings.id) await base44.entities.AppSettings.update(settings.id, data); else await base44.entities.AppSettings.create(data);
+      await qc.invalidateQueries({ queryKey: ['settings'] });
+    } catch (e) { setSaveErr(`Saving failed: ${e.message}`); }
     setSaving(false);
   };
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -53,6 +56,7 @@ export default function Settings() {
           <label className="text-sm">Idle pause (seconds)<input type="number" className={`${input} font-mono`} value={f.idle_pause_seconds} onChange={set('idle_pause_seconds')} /></label>
         </div>
         <button onClick={save} disabled={saving} className="h-9 px-4 rounded-md bg-slate-900 text-white text-sm hover:bg-slate-800 disabled:opacity-60">{saving ? 'Saving…' : 'Save settings'}</button>
+        {saveErr && <p className="text-xs text-rose-700">{saveErr}</p>}
       </section>
       <section className="space-y-2">
         <h2 className="text-sm font-medium">Test data · re-import from engine</h2>

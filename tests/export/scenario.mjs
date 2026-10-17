@@ -73,7 +73,7 @@ export async function runScenario() {
     const events = (await EditEvent.filter({ scan: { $in: scans.map((x) => x.id) } }, { sort: 'edited_at' })).items;
     const rejected = (await Nodule.filter({ scan: { $in: scans.map((x) => x.id) }, status: 'Rejected' })).items;
     const sel = selectForExport({ scans, nodules, rejected, events, onlyPending: true });
-    const rows = measurementRows(sel.scans, sel.nodules, sel.events);
+    const rows = measurementRows(sel.scans, sel.nodules);
     const wbDay = buildWorkbook(XLSX, { ...sel, initials: 'DR', date: `2026-10-${day}` });
     const readme = XLSX.utils.sheet_to_json(wbDay.Sheets['Read me'], { header: 1 }).map((r) => r[0]).filter(Boolean).slice(1);
     await markExported([...sel.nodules, ...sel.rejected], `2026-10-${day}T18:00:00.000Z`);
