@@ -465,7 +465,7 @@ function ReviewScan() {
             <ViewerPane meta={meta} base={base} sid={sid} z={z} step={step} setZ={setZ} win={win} setWin={setWin} nodules={nodules} shapes={shapes}
               sel={sel} draft={draft} editable={!locked} mode={mode} clicks={clicks} onSelect={select} onImageClick={onImageClick} points={points}
               onDrag={onDrag} onDragEnd={onDragEnd} showRejected={showRejected} setShowRejected={setShowRejected} modeBar={modeBar} busy={busy}
-              onStrokeEnd={onStrokeEnd} brushPx={brushPx}
+              onStrokeEnd={onStrokeEnd} brushPx={brushPx} span={span}
               priorView={priorView && priorQ.data?.scan ? { base, priorScan: priorQ.data.scan, pn: priorView, onClose: () => setPriorView(null) } : null}
               tools={{
                 on: !locked && !!sel && !isNF, sel, refineOk: refineOk && !!meta, mode,

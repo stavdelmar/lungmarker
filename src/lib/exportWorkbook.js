@@ -30,12 +30,22 @@ export function timeZoneLabel(at = new Date()) {
 
 // Builds the 3-sheet export workbook. Used by the Export page and by tests/export.
 // nodules = the Accepted nodules of the selected (approved) scans.
-export function buildWorkbook(XLSX, { scans, nodules, rejected = [], events: allEvents, initials, date }) {
+// Report builder: keep only the chosen Measurements columns (cells already formatted), in master-sheet order.
+function keepColumns(XLSX, ws, idx, nRows) {
+  const cells = [];
+  for (let r = 0; r <= nRows; r++) idx.forEach((c, i) => { const cell = ws[XLSX.utils.encode_cell({ r, c })]; if (cell) cells.push([r, i, cell]); });
+  Object.keys(ws).filter((k) => k[0] !== '!').forEach((k) => delete ws[k]);
+  cells.forEach(([r, c, cell]) => { ws[XLSX.utils.encode_cell({ r, c })] = cell; });
+  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: nRows, c: Math.max(0, idx.length - 1) } });
+}
+
+export function buildWorkbook(XLSX, { scans, nodules, rejected = [], events: allEvents, initials, date, columns }) {
   const events = liveEvents(scans, allEvents); // a scan reset for re-import starts its trail again
   const meas = measurementRows(scans, nodules, events);
   const ws = XLSX.utils.aoa_to_sheet([MEAS_HEADERS, ...meas]);
   datesToExcel(XLSX, ws, meas.length);
   meas.forEach((_, r) => ONE_DEC_COLS.forEach((c) => { const cell = ws[XLSX.utils.encode_cell({ r: r + 1, c })]; if (cell && cell.t === 'n') cell.z = '0.0'; }));
+  if (columns && columns.length < MEAS_HEADERS.length) keepColumns(XLSX, ws, columns.map((h) => MEAS_HEADERS.indexOf(h)), meas.length);
   const versions = [...new Set(scans.map((s) => s.engine_version).filter(Boolean))].join(', ') || 'unknown';
   const sMap = Object.fromEntries(scans.map((s) => [s.id, s]));
   const updated = nodules.filter((n) => n.changed_after_export && sMap[n.scan]).map((n) => { const s = sMap[n.scan]; return [`${s.patient_id} · ${String(s.scan_date).slice(0, 10)} · ${s.timepoint} · ${n.nodule_label || `${n.prior_label} (Not found)`}`]; });

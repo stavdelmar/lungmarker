@@ -5,7 +5,7 @@ import { LogOut, Settings } from 'lucide-react';
 
 const links = [
   { to: '/', label: 'Worklist' },
-  { to: '/results', label: 'Results' },
+  { to: '/results', label: 'Dashboard' },
 ];
 
 export default function Layout() {

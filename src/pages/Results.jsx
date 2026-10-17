@@ -11,7 +11,9 @@ import { exportable } from '@/lib/exportRows';
 import { selectForExport, markExported, sortKey, exportStatus, preselect } from '@/lib/exportSelect';
 import SummaryCards from '@/components/results/SummaryCards';
 import PatientsOverTime from '@/components/results/PatientsOverTime';
-import SearchBox from '@/components/results/SearchBox';
+import Performance from '@/components/results/Performance';
+import ReportBuilder from '@/components/results/ReportBuilder';
+import { MEAS_HEADERS } from '@/lib/exportRows';
 import ResultDetail from '@/components/results/ResultDetail';
 import { minutesOnScan, openMinutes } from '@/lib/minutes';
 
@@ -23,7 +25,7 @@ export default function Results() {
   const { data: settings } = useSettings();
   const me = useMe();
   const qc = useQueryClient();
-  const [search, setSearch] = useState({ patients: '', sheet: '' }); // each tab keeps its own Patient ID search
+  const [search, setSearch] = useState({ patients: '' }); // each tab keeps its own Patient ID search
   const [view, setView] = useState('all'); // filter chips: they only change what the table shows
   const [selected, setSelected] = useState(new Set());
   const seen = useRef(new Set());
@@ -34,10 +36,11 @@ export default function Results() {
   const curTab = tab || (me.isReviewer ? 'sheet' : 'patients');
   const scansQ = useQuery({ queryKey: ['approvedScans'], queryFn: () => fetchAll(Scan, { review_status: 'Approved' }, 'patient_id') });
   const scans = scansQ.data || [];
-  const q = search[curTab].trim().toLowerCase();
-  const setQ = (v) => setSearch((cur) => ({ ...cur, [curTab]: v }));
-  const shown = q ? scans.filter((s) => s.patient_id.toLowerCase().includes(q)) : scans;
-  const shownPatients = new Set(shown.map((s) => s.patient_id)).size;
+  const setQ = (v) => setSearch((cur) => ({ ...cur, patients: v }));
+  const [f, setF] = useState({ dateField: 'approved_at', from: '', to: '', patient: '', cols: MEAS_HEADERS });
+  const inRange = (s) => { const d = String(s[f.dateField] || '').slice(0, 10); return (!f.from || d >= f.from) && (!f.to || d <= f.to); };
+  const shown = scans.filter((s) => (!f.patient || s.patient_id === f.patient) && inRange(s));
+  const patientIds = [...new Set(scans.map((s) => s.patient_id))].sort();
   const ids = scans.map((s) => s.id);
   const nodQ = useQuery({ queryKey: ['resultNodules', ids.join(',')], enabled: !!scansQ.data, queryFn: () => fetchAll(Nodule, { scan: { $in: ids }, status: 'Accepted' }, 'nodule_label') });
   const sMap = Object.fromEntries(shown.map((s) => [s.id, s]));
@@ -71,7 +74,7 @@ export default function Results() {
       const rejected = (await fetchAll(Nodule, { scan: { $in: scanIds }, status: 'Rejected' }, 'nodule_label'))
         .map((n) => (me.isReviewer ? n : { ...n, exported_at: null, changed_after_export: false }));
       const sel = selectForExport({ scans, nodules: toExport, rejected, events, onlyPending: false });
-      const wb = buildWorkbook(XLSX, { ...sel, initials: me.initials, date: today() });
+      const wb = buildWorkbook(XLSX, { ...sel, initials: me.initials, date: today(), columns: f.cols });
       XLSX.writeFile(wb, `lungmarker_export_${today()}.xlsx`);
       if (me.isReviewer) {
         await markExported([...sel.nodules, ...sel.rejected]);
@@ -87,28 +90,25 @@ export default function Results() {
   return (
     <div className="px-8 py-6 max-w-[1400px] w-full mx-auto space-y-5">
       <div className="flex items-end justify-between gap-4">
-        <h1 className="text-xl font-semibold tracking-tight">Results</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
         <div className="flex items-center gap-3">
           {curTab === 'sheet' && <button onClick={exportExcel} disabled={busy || !toExport.length}
             className="h-8 px-3 rounded-md bg-slate-900 text-white text-sm flex items-center gap-2 hover:bg-slate-800 disabled:opacity-40">
             {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-            Export selected <span className="font-mono text-xs opacity-80">({toExport.length})</span>
+            Export to Excel <span className="font-mono text-xs opacity-80">({toExport.length})</span>
           </button>}
         </div>
       </div>
       {exportMsg && <p className="text-xs text-slate-500 -mt-3 text-right">{exportMsg}</p>}
-      <div>
-        <SummaryCards scanIds={shown.map((s) => s.id)} scans={shown} settings={settings} />
-        <p className="text-[11px] text-slate-500 mt-1.5">{q ? `Filtered: ${shownPatients} patient${shownPatients === 1 ? '' : 's'}` : 'All patients'}</p>
-      </div>
+      <SummaryCards scans={scans} />
       <div className="flex gap-1 border-b border-slate-200">
-        {[['sheet', 'Sheet rows · export'], ['patients', 'Patients over time']].map(([k, label]) => (
+        {[['sheet', 'Reports'], ['patients', 'Nodules over time'], ['perf', 'Performance']].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} className={`px-3 py-2 text-sm -mb-px border-b-2 whitespace-nowrap ${curTab === k ? 'border-slate-900 font-medium text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>{label}</button>
         ))}
       </div>
-      {curTab === 'patients' ? <PatientsOverTime scans={scans} nodules={nodQ.data || []} base={settings.engine_base_url} q={search.patients} setQ={setQ} /> : <>
+      {curTab === 'perf' ? <Performance scans={scans} settings={settings} /> : curTab === 'patients' ? <PatientsOverTime scans={scans} nodules={nodQ.data || []} base={settings.engine_base_url} q={search.patients} setQ={setQ} /> : <>
+      <ReportBuilder f={f} setF={setF} patients={patientIds} />
       <div className="flex flex-wrap items-center gap-2">
-        <SearchBox value={search.sheet} onChange={setQ} />
         {[['all', 'All', nodules.length], ['new', 'Not exported', counts.new], ['changed', 'Changed since export', counts.changed]].map(([k, label, c]) => (
           <button key={k} onClick={() => setView(k)} className={`h-7 px-3 rounded-full text-xs border ${view === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}>
             {label} <span className="font-mono opacity-75">({c})</span>

@@ -105,7 +105,7 @@ export default function NodulePanel(p) {
             <div className="flex items-center gap-2 text-sm">
               <Lock className="w-4 h-4 text-emerald-700 shrink-0" />
               <span>Approved by <b className="font-mono">{scan.approved_by_initials}</b> · <span className="font-mono text-xs">{new Date(scan.approved_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}</span> · <span className="whitespace-nowrap"><span className="font-mono">{minutesOnScan(scan) ?? '—'}</span> min on scan</span> <span className="text-slate-500 whitespace-nowrap">(active){openMinutes(scan) != null && <> · <span className="font-mono">{openMinutes(scan)}</span> min open</>}</span></span>
-              <Link to="/results" className="ml-auto text-xs text-teal-700 hover:underline whitespace-nowrap">Results →</Link>
+              <Link to="/results" className="ml-auto text-xs text-teal-700 hover:underline whitespace-nowrap">Dashboard →</Link>
               {isReviewer && <button onClick={onReopen} className="h-7 px-2.5 rounded-md border border-slate-300 bg-white text-xs hover:bg-slate-100">Reopen</button>}
             </div>
             {isReviewer && next && (

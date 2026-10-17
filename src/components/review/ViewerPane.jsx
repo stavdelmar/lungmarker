@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Minus, Plus, Loader2, Eraser, PenLine, Undo2, MoreHorizontal, RotateCcw, Scissors, PlusCircle, MousePointerClick } from 'lucide-react';
+import { Minus, Plus, Loader2, Eraser, PenLine, Undo2, MoreHorizontal, RotateCcw, Scissors, PlusCircle, MousePointerClick, ArrowUp, ArrowDown } from 'lucide-react';
 import { engine } from '@/api/engine';
 import { fmtMaybe, boxOf } from '@/components/review/viewerUtils';
 import PriorPane from '@/components/review/PriorPane';
@@ -46,7 +46,7 @@ function OutlineTools({ t }) {
 }
 
 export default function ViewerPane(p) {
-  const { meta, base, sid, z, step, setZ, win, setWin, nodules, shapes, sel, draft, editable, mode, clicks, onSelect, onImageClick, onDrag, onDragEnd, showRejected, setShowRejected, modeBar, busy, onStrokeEnd, brushPx, tools, priorView, points } = p;
+  const { meta, base, sid, z, step, setZ, win, setWin, nodules, shapes, sel, draft, editable, mode, clicks, onSelect, onImageClick, onDrag, onDragEnd, showRejected, setShowRejected, modeBar, busy, onStrokeEnd, brushPx, tools, priorView, points, span } = p;
   const strokeMode = mode === 'erase' || mode === 'draw';
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -95,7 +95,14 @@ export default function ViewerPane(p) {
           <div>Slice #{sliceNo} <span className="text-neutral-400">({z + 1}/{n})</span></div>
           <div className="text-neutral-400">{win.charAt(0).toUpperCase() + win.slice(1)} window</div>
           {sel && <div className="text-teal-300">{sel.nodule_label}{isKey ? '' : <span className="text-neutral-400"> · key slice #{meta.slices?.find((s) => s.z === sel.key_slice_z)?.slice_number ?? (sel.key_slice_z ?? 0) + 1}</span>}</div>}
-          {sel && sel.kind !== 'prior_not_found' && <div className="text-fuchsia-300">{fmtMaybe(sel.long_axis_mm)} × {fmtMaybe(sel.short_axis_mm)} mm</div>}
+          {sel && sel.kind !== 'prior_not_found' && <div className="text-fuchsia-300 pointer-events-auto w-fit" title="Long axis × Short axis (mm)">{fmtMaybe(sel.long_axis_mm)} × {fmtMaybe(sel.short_axis_mm)} mm</div>}
+          {span && (
+            <div className="pointer-events-auto flex items-center gap-1 text-neutral-300">
+              slices {span.firstNum}–{span.lastNum}
+              <button onClick={() => setZ(span.first)} title={`First outlined slice (#${span.firstNum})`} aria-label="Go to first outlined slice" className={`hover:text-teal-300 ${z === span.first ? 'text-teal-300' : ''}`}><ArrowUp className="w-3 h-3" /></button>
+              <button onClick={() => setZ(span.last)} title={`Last outlined slice (#${span.lastNum})`} aria-label="Go to last outlined slice" className={`hover:text-teal-300 ${z === span.last ? 'text-teal-300' : ''}`}><ArrowDown className="w-3 h-3" /></button>
+            </div>
+          )}
         </div>
         {points && isKey && (
           <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 pointer-events-none rounded bg-black/60 px-2 py-1 text-[11px] text-neutral-300 whitespace-nowrap">
@@ -111,7 +118,7 @@ export default function ViewerPane(p) {
           )}
         </Viewer>
         </div>
-        <SliceSlider z={z} n={n} onChange={setZ}
+        <SliceSlider z={z} n={n} onChange={setZ} range={span}
           ticks={nodules.filter((x) => x.key_slice_z != null && (showRejected || x.status !== 'Rejected')).map((x) => ({ id: x.id, z: x.key_slice_z, label: x.nodule_label, color: tone(x, sel?.id) }))} />
       </div>
     </div>

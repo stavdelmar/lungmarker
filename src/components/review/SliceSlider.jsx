@@ -6,7 +6,7 @@ const TICK = {
   rejected: 'bg-transparent border-t-2 border-dashed border-red-400 h-0',
 };
 
-export default function SliceSlider({ z, n, ticks, onChange }) {
+export default function SliceSlider({ z, n, ticks, onChange, range }) {
   const ref = useRef();
   const pos = (v) => `${(v / Math.max(1, n - 1)) * 100}%`;
   const set = (e) => {
@@ -20,6 +20,10 @@ export default function SliceSlider({ z, n, ticks, onChange }) {
         onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); set(e); }}
         onPointerMove={(e) => e.buttons === 1 && set(e)}>
         <div className="absolute left-1/2 -translate-x-1/2 inset-y-0 w-px bg-neutral-700" />
+        {range && ( /* selected nodule's outline range: thin teal bracket, first → last slice */
+          <div title={`Outline: slices ${range.firstNum}–${range.lastNum}`} className="absolute -left-0.5 w-1 border-l-2 border-y-2 border-teal-400 rounded-l-sm"
+            style={{ top: pos(range.first), height: `calc(${pos(range.last)} - ${pos(range.first)})`, minHeight: 3 }} />
+        )}
         {ticks.map((t) => (
           <div key={t.id} title={t.label} className={`absolute left-0.5 right-0.5 h-[3px] -translate-y-1/2 rounded-full ${TICK[t.color]}`} style={{ top: pos(t.z) }} />
         ))}
