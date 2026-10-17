@@ -8,11 +8,10 @@ const sub = 'text-left font-medium px-4 py-1.5 text-[11px] uppercase tracking-wi
 // One patient: a clickable summary row (same action as its button), then — when expanded — its scans in order.
 export default function PatientRows({ p, all, expanded, onToggle, onOpen, showMinutes }) {
   const Chev = expanded ? ChevronDown : ChevronRight;
-  const go = () => (p.next ? onOpen(p.next) : onToggle());
   const cols = showMinutes ? 5 : 4;
   return (
     <>
-      <tr onClick={go} className={`border-t border-slate-200 cursor-pointer ${p.status === 'Done' ? 'bg-slate-50/50 hover:bg-slate-50' : 'hover:bg-slate-50'}`}>
+      <tr onClick={onToggle} className={`border-t border-slate-200 cursor-pointer ${p.status === 'Done' ? 'bg-slate-50/50 hover:bg-slate-50' : 'hover:bg-slate-50'}`}>
         <td className="px-4 py-3 font-mono font-medium">
           <span className="inline-flex items-center gap-1.5">
             <button onClick={(e) => { e.stopPropagation(); onToggle(); }} aria-label={expanded ? 'Collapse' : 'Expand'} className="w-6 h-6 -ml-1 grid place-items-center rounded hover:bg-slate-200"><Chev className="w-4 h-4 text-slate-400" /></button>
