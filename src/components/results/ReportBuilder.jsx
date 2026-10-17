@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, Columns3 } from 'lucide-react';
+import { AlertTriangle, Columns3, ChevronDown } from 'lucide-react';
 import { MEAS_HEADERS } from '@/lib/exportRows';
 
 const input = 'h-8 px-2 rounded-md border border-slate-300 bg-white text-xs';
@@ -17,15 +17,18 @@ export default function ReportBuilder({ f, setF, patients, exportButton }) {
         <input type="date" value={f.from} onChange={(e) => set('from', e.target.value)} className={input} aria-label="From" />
         <span>to</span>
         <input type="date" value={f.to} onChange={(e) => set('to', e.target.value)} className={input} aria-label="To" />
-        <select value={f.patient} onChange={(e) => set('patient', e.target.value)} className={`${input} ml-2`}>
-          <option value="">All patients</option>
-          {patients.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
+        <div className="relative ml-2">
+          <select value={f.patient} onChange={(e) => set('patient', e.target.value)} className={`${input} appearance-none pr-7`}>
+            <option value="">All patients</option>
+            {patients.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <ChevronDown className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500" />
+        </div>
         <button onClick={() => setColsOpen((o) => !o)} className={`${input} flex items-center gap-1.5 hover:bg-slate-50`}>
           <Columns3 className="w-3.5 h-3.5" />Columns <span className="font-mono">{f.cols.length}/{MEAS_HEADERS.length}</span>
         </button>
-        {exportButton}
         {(f.from || f.to || f.patient) && <button onClick={() => setF((cur) => ({ ...cur, from: '', to: '', patient: '' }))} className="text-teal-700 hover:underline">Clear</button>}
+        <div className="ml-auto">{exportButton}</div>
       </div>
       {colsOpen && (
         <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-xs">
