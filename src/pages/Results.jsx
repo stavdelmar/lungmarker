@@ -75,7 +75,7 @@ export default function Results() {
         .map((n) => (me.isReviewer ? n : { ...n, exported_at: null, changed_after_export: false }));
       const sel = selectForExport({ scans, nodules: toExport, rejected, events, onlyPending: false });
       const wb = buildWorkbook(XLSX, { ...sel, initials: me.initials, date: today(), columns: f.cols });
-      XLSX.writeFile(wb, `lungmarker_export_${today()}.xlsx`);
+      XLSX.writeFile(wb, `Harbor_lab_measurements_${today()}.xlsx`);
       if (me.isReviewer) {
         await markExported([...sel.nodules, ...sel.rejected]);
         setSelected((cur) => { const s2 = new Set(cur); sel.nodules.forEach((n) => s2.delete(n.id)); return s2; });
