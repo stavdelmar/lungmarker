@@ -10,9 +10,10 @@ export function uncertainty(n) {
   if (!n || n.kind === 'prior_not_found' || n.source !== 'AI') return { unsure: false, lowConf: false, vessel: false, pct: null };
   const flags = n.flags || [];
   const conf = n.ai_confidence ?? n.ai_draft?.confidence ?? null;
-  const lowConf = flags.includes('low_confidence') || (!Array.isArray(n.flags) && conf != null && conf < LOW_CONFIDENCE);
+  const faintRim = flags.includes('faint_rim');
+  const lowConf = faintRim || flags.includes('low_confidence') || (!Array.isArray(n.flags) && conf != null && conf < LOW_CONFIDENCE);
   const vessel = flags.includes('possible_vessel');
-  return { unsure: lowConf || vessel, lowConf, vessel, pct: conf == null ? null : Math.round(conf * 100) };
+  return { unsure: lowConf || vessel, lowConf, faintRim, vessel, pct: faintRim || conf == null ? null : Math.round(conf * 100) };
 }
 
 // Other engine flags, in words (shown small; they are information, not doubt).

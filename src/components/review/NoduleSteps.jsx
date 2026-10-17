@@ -52,6 +52,7 @@ export default function NoduleSteps({ sel, nodules, locked, followup, canAccept,
         {u.unsure && (
           <div className="rounded-lg border-2 border-amber-400 bg-amber-50 p-3 space-y-1.5 text-[13px] text-amber-950">
             <div className="flex flex-wrap gap-1.5"><DoubtPills n={sel} size="lg" /></div>
+            {u.faintRim && <p className="font-semibold">AI unsure about the edges: may be larger than drawn</p>}
             {u.lowConf && <p>The AI is less sure where this nodule's edge is. Check the outline before confirming it.</p>}
             {u.vessel && <p>It may be a vessel seen end-on. Scroll a few slices up and down: a vessel continues as a tube and branches, a nodule ends.</p>}
           </div>
