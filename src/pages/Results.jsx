@@ -11,6 +11,7 @@ import { exportable } from '@/lib/exportRows';
 import { selectForExport, markExported, sortKey, exportStatus, preselect } from '@/lib/exportSelect';
 import SummaryCards from '@/components/results/SummaryCards';
 import PatientsOverTime from '@/components/results/PatientsOverTime';
+import SearchBox from '@/components/results/SearchBox';
 import ResultDetail from '@/components/results/ResultDetail';
 
 const { Scan, Nodule, EditEvent } = base44.entities;
@@ -21,7 +22,7 @@ export default function Results() {
   const { data: settings } = useSettings();
   const me = useMe();
   const qc = useQueryClient();
-  const [patient, setPatient] = useState('');
+  const [search, setSearch] = useState({ patients: '', sheet: '' }); // each tab keeps its own Patient ID search
   const [view, setView] = useState('all'); // filter chips: they only change what the table shows
   const [selected, setSelected] = useState(new Set());
   const seen = useRef(new Set());
@@ -32,11 +33,13 @@ export default function Results() {
   const curTab = tab || (me.isReviewer ? 'sheet' : 'patients');
   const scansQ = useQuery({ queryKey: ['approvedScans'], queryFn: () => fetchAll(Scan, { review_status: 'Approved' }, 'patient_id') });
   const scans = scansQ.data || [];
-  const shown = patient ? scans.filter((s) => s.patient_id === patient) : scans;
-  const ids = shown.map((s) => s.id);
+  const q = search[curTab].trim().toLowerCase();
+  const setQ = (v) => setSearch((cur) => ({ ...cur, [curTab]: v }));
+  const shown = q ? scans.filter((s) => s.patient_id.toLowerCase().includes(q)) : scans;
+  const shownPatients = new Set(shown.map((s) => s.patient_id)).size;
+  const ids = scans.map((s) => s.id);
   const nodQ = useQuery({ queryKey: ['resultNodules', ids.join(',')], enabled: !!scansQ.data, queryFn: () => fetchAll(Nodule, { scan: { $in: ids }, status: 'Accepted' }, 'nodule_label') });
-  const sMap = Object.fromEntries(scans.map((s) => [s.id, s]));
-  const patients = [...new Set(scans.map((s) => s.patient_id))].sort();
+  const sMap = Object.fromEntries(shown.map((s) => [s.id, s]));
   // Same rows and order as the Excel file (accepted, ≥ 4 mm, grouped by scan, N1, N2…).
   const nodules = (nodQ.data || []).filter((n) => sMap[n.scan] && exportable(n))
     .sort((a, b) => sortKey(sMap[a.scan], a).localeCompare(sortKey(sMap[b.scan], b)));
@@ -63,7 +66,7 @@ export default function Results() {
       const events = await fetchAll(EditEvent, { scan: { $in: [...new Set(toExport.map((n) => n.scan))] } }, 'edited_at');
       const sel = selectForExport({ scans, nodules: toExport, events, onlyPending: false });
       const wb = buildWorkbook(XLSX, { ...sel, initials: me.initials, date: today() });
-      XLSX.writeFile(wb, `lungmarker_export_${today()}${patient ? `_${patient}` : ''}.xlsx`);
+      XLSX.writeFile(wb, `lungmarker_export_${today()}.xlsx`);
       if (me.isReviewer) {
         await markExported(sel.nodules);
         setSelected((cur) => { const s2 = new Set(cur); sel.nodules.forEach((n) => s2.delete(n.id)); return s2; });
@@ -80,10 +83,6 @@ export default function Results() {
       <div className="flex items-end justify-between gap-4">
         <h1 className="text-xl font-semibold tracking-tight">Results</h1>
         <div className="flex items-center gap-3">
-          <select value={patient} onChange={(e) => setPatient(e.target.value)} className="h-8 px-2 rounded-md border border-slate-200 bg-white text-sm">
-            <option value="">All patients</option>
-            {patients.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
           {curTab === 'sheet' && <button onClick={exportExcel} disabled={busy || !toExport.length}
             className="h-8 px-3 rounded-md bg-slate-900 text-white text-sm flex items-center gap-2 hover:bg-slate-800 disabled:opacity-40">
             {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
@@ -92,14 +91,18 @@ export default function Results() {
         </div>
       </div>
       {exportMsg && <p className="text-xs text-slate-500 -mt-3 text-right">{exportMsg}</p>}
-      <SummaryCards scanIds={scans.map((s) => s.id)} scans={scans} settings={settings} />
+      <div>
+        <SummaryCards scanIds={shown.map((s) => s.id)} scans={shown} settings={settings} />
+        <p className="text-[11px] text-slate-500 mt-1.5">{q ? `Filtered: ${shownPatients} patient${shownPatients === 1 ? '' : 's'}` : 'All patients'}</p>
+      </div>
       <div className="flex gap-1 border-b border-slate-200">
         {[['sheet', 'Sheet rows · export'], ['patients', 'Patients over time']].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} className={`px-3 py-2 text-sm -mb-px border-b-2 whitespace-nowrap ${curTab === k ? 'border-slate-900 font-medium text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>{label}</button>
         ))}
       </div>
-      {curTab === 'patients' ? <PatientsOverTime scans={shown} nodules={nodQ.data || []} base={settings.engine_base_url} /> : <>
-      <div className="flex items-center gap-2">
+      {curTab === 'patients' ? <PatientsOverTime scans={scans} nodules={nodQ.data || []} base={settings.engine_base_url} q={search.patients} setQ={setQ} /> : <>
+      <div className="flex flex-wrap items-center gap-2">
+        <SearchBox value={search.sheet} onChange={setQ} />
         {[['all', 'All', nodules.length], ['new', 'Not exported', counts.new], ['changed', 'Changed since export', counts.changed]].map(([k, label, c]) => (
           <button key={k} onClick={() => setView(k)} className={`h-7 px-3 rounded-full text-xs border ${view === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}>
             {label} <span className="font-mono opacity-75">({c})</span>

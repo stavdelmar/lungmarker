@@ -1,6 +1,6 @@
-import { Search } from 'lucide-react';
 import { volumeOf } from '@/lib/patientTracks';
 import { isBeyond } from '@/components/results/TrackCard';
+import SearchBox from '@/components/results/SearchBox';
 
 export const FILTERS = [
   ['beyond', 'Change beyond noise', (p) => p.tracks.some((t) => t.long?.abs != null && isBeyond(t))],
@@ -15,18 +15,20 @@ export default function PatientToolbar({ q, setQ, active, setActive, sort, setSo
   const toggle = (k) => setActive((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]));
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="relative">
-        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search Patient ID" className="h-8 w-44 pl-7 pr-2 rounded-md border border-slate-200 bg-white text-sm" />
-      </div>
+      <SearchBox value={q} onChange={setQ} />
       {FILTERS.map(([k, label]) => (
         <button key={k} onClick={() => toggle(k)} className={`h-7 px-3 rounded-full text-xs border whitespace-nowrap ${active.includes(k) ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}>{label}</button>
       ))}
-      <select value={sort} onChange={(e) => setSort(e.target.value)} className="h-8 px-2 rounded-md border border-slate-200 bg-white text-sm">
-        <option value="change">Largest change first</option>
-        <option value="id">Patient ID</option>
-      </select>
-      <span className="ml-auto text-xs text-slate-500 whitespace-nowrap">Showing {shown} of {total} patients</span>
+      <div className="ml-auto flex items-center gap-3 whitespace-nowrap">
+        <span className="text-xs text-slate-500">Showing {shown} of {total} patients</span>
+        <label className="flex items-center gap-1.5 text-xs text-slate-500">
+          Sort by:
+          <select value={sort} onChange={(e) => setSort(e.target.value)} className="h-7 pl-1.5 pr-1 rounded border-0 bg-transparent text-xs font-medium text-slate-800 hover:bg-slate-100 cursor-pointer">
+            <option value="change">Biggest change</option>
+            <option value="id">Patient ID</option>
+          </select>
+        </label>
+      </div>
     </div>
   );
 }

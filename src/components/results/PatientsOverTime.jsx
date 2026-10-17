@@ -7,9 +7,8 @@ import PatientSummaryTable from '@/components/results/PatientSummaryTable';
 import PatientToolbar, { FILTERS, largestChange } from '@/components/results/PatientToolbar';
 import ResultDetail from '@/components/results/ResultDetail';
 
-export default function PatientsOverTime({ scans, nodules, base }) {
+export default function PatientsOverTime({ scans, nodules, base, q, setQ }) {
   const [detail, setDetail] = useState(null);
-  const [q, setQ] = useState('');
   const [active, setActive] = useState([]);
   const [sort, setSort] = useState('change');
   const all = patientTracks(scans, nodules).filter((p) => p.timepoints.length > 0);
