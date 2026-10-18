@@ -61,8 +61,11 @@ export default function NoduleSteps({ sel, nodules, locked, followup, canAccept,
         {!locked && (
           <div className="space-y-2">
             <div className="flex gap-2">
-              <button onClick={() => advance(() => setIsNodule(true))} className={`${big} bg-slate-900 text-white hover:bg-slate-800`}><Check className="w-4 h-4 shrink-0" />Yes <kbd className="text-[10px] opacity-70 font-normal">Enter</kbd></button>
-              <button onClick={() => setRejecting((r) => !r)} className={`${big} border-2 border-rose-200 bg-white text-rose-700 hover:bg-rose-50`}><X className="w-4 h-4 shrink-0" />Reject</button>
+              <button onClick={() => advance(() => setIsNodule(true))} title="Yes (Enter)" className="flex-1 min-w-24 px-3 py-1.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 flex flex-col items-center justify-center leading-tight">
+                <span className="text-sm font-semibold flex items-center gap-1.5 whitespace-nowrap"><Check className="w-4 h-4 shrink-0" />Yes</span>
+                <kbd className="text-[10px] font-normal opacity-80 font-sans">Enter</kbd>
+              </button>
+              <button onClick={() => setRejecting((r) => !r)} className={`${big.replace("h-9 ", "")} self-stretch border-2 border-rose-200 bg-white text-rose-700 hover:bg-rose-50`}><X className="w-4 h-4 shrink-0" />Reject</button>
             </div>
             {rejecting && (
               <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">Why?
