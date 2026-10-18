@@ -94,7 +94,7 @@ export default function NodulePanel(p) {
               </div>
             )}
             {!(listView && hasDetail) && <div className="m-3 rounded-lg border border-slate-200 bg-white shadow-sm">
-              {sel && <NoduleHeader sel={sel} nodules={nodules} onSelect={onSelect} onBack={() => setListView(true)} />}
+              {sel && <NoduleHeader sel={sel} nodules={nodules} onSelect={onSelect} />}
               <div>
                 {!sel && selId !== CENTRAL && <div className="p-4 text-sm text-slate-500">Select a nodule in the list.</div>}
                 {selId === CENTRAL && <CentralDetail central={central} locked={locked} onAdd={onAdd} />}

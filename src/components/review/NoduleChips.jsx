@@ -46,7 +46,7 @@ export default function NoduleChips({ nodules, selId, onSelect, central, onList,
       {gone.length > 0 && <span className={`${label} ml-2`}>From Baseline:</span>}
       {gone.map((n) => chip(n.id, <><HelpCircle className="w-3.5 h-3.5 shrink-0" />Baseline {n.prior_label}: missing?</>,
         n.status !== 'Pending' ? 'accepted' : 'pending', () => onSelect(n), `Baseline ${n.prior_label}`, 'border-dashed'))}
-      <button onClick={onList} className="ml-auto h-7 px-2 rounded text-xs text-slate-600 hover:bg-slate-100 flex items-center gap-1 whitespace-nowrap"><List className="w-3.5 h-3.5" />List view</button>
+      <button onClick={onList} title="Back to all nodules (Esc)" className="ml-auto h-7 px-2.5 rounded-md border border-slate-300 bg-white text-xs text-slate-800 hover:bg-slate-100 flex items-center gap-1 whitespace-nowrap shrink-0"><List className="w-3.5 h-3.5" />All nodules</button>
     </div>
   );
 }
