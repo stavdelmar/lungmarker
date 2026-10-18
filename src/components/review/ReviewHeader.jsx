@@ -10,9 +10,13 @@ export default function ReviewHeader({ scan, timer, showTimer, readOnly, prior, 
   const [ask, setAsk] = useState(false); // inline "are you sure" (no browser dialog)
   return (
     <div className="h-11 flex items-center gap-4 px-4 bg-white border-b border-slate-200 text-sm">
-      <Link to="/" className="flex items-center text-slate-500 hover:text-slate-900"><ChevronLeft className="w-4 h-4" />Worklist</Link>
-      <span className="font-mono font-medium">{scan.patient_id}</span>
-      <span className="text-slate-600">{scan.timepoint}</span>
+      <span className="flex items-center gap-1.5 text-sm">
+        <Link to="/" className="flex items-center text-slate-700 hover:text-slate-900 hover:underline"><ChevronLeft className="w-4 h-4" />Worklist</Link>
+        <span className="text-slate-400">/</span>
+        <span className="font-mono font-medium">{scan.patient_id}</span>
+        <span className="text-slate-400">/</span>
+        <span className="text-slate-700">{scan.timepoint}</span>
+      </span>
       <span className="font-mono text-slate-500 text-xs">{scan.scan_date?.slice(0, 10)} · series {scan.series_number ?? '—'} · {scan.slice_thickness_mm ?? '—'} mm</span>
       <StatusBadge status={scan.review_status || 'Not started'} />
       {prior !== undefined && (prior ? (

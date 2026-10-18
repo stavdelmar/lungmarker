@@ -1,6 +1,6 @@
 import { Plus, Check, ChevronRight, Lock, ScanSearch, CircleCheck, LogOut, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import NoduleChips from '@/components/review/NoduleChips';
 import NoduleList from '@/components/review/NoduleList';
 import NoduleSteps from '@/components/review/NoduleSteps';
@@ -54,6 +54,18 @@ export default function NodulePanel(p) {
     checks, onApprove, onReopen, central, notFound, next, waitForPrior, onSaveExit, unconfirmed = [], onAccountPrior, matchChecks = [] } = p;
   const approved = scan.review_status === 'Approved';
   const [listView, setListView] = useState(false);
+  const hasDetail = !!sel || selId === CENTRAL;
+  const pick = (n) => { setListView(false); onSelect(n); };
+  // Esc in the nodule detail goes back to the full list (ignored while typing).
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || !hasDetail || listView) return;
+      if (e.target.closest?.('input, textarea, select, [role="dialog"]')) return;
+      setListView(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [hasDetail, listView]);
   return (
     <aside className="nodule-panel w-[35%] min-w-[420px] border-l border-slate-200 bg-slate-50 flex flex-col min-h-0">
       <div className="h-10 shrink-0 flex items-center px-4 border-b border-slate-200 bg-white">
@@ -78,11 +90,11 @@ export default function NodulePanel(p) {
             ) : (
               <div className="shrink-0 bg-white border-b border-slate-200">
                 {(sel || selId === CENTRAL) && <button onClick={() => setListView(false)} className="w-full px-3 py-1 text-xs text-teal-700 hover:bg-teal-50 text-right">Compact view</button>}
-                <NoduleList nodules={nodules} selId={selId} onSelect={onSelect} central={central} />
+                <NoduleList nodules={nodules} selId={selId} onSelect={pick} central={central} />
               </div>
             )}
-            <div className="m-3 rounded-lg border border-slate-200 bg-white shadow-sm">
-              {sel && <NoduleHeader sel={sel} nodules={nodules} onSelect={onSelect} />}
+            {!(listView && hasDetail) && <div className="m-3 rounded-lg border border-slate-200 bg-white shadow-sm">
+              {sel && <NoduleHeader sel={sel} nodules={nodules} onSelect={onSelect} onBack={() => setListView(true)} />}
               <div>
                 {!sel && selId !== CENTRAL && <div className="p-4 text-sm text-slate-500">Select a nodule in the list.</div>}
                 {selId === CENTRAL && <CentralDetail central={central} locked={locked} onAdd={onAdd} />}
@@ -94,7 +106,7 @@ export default function NodulePanel(p) {
                     onReject={onReject} onRejectClick={onRejectClick} onNext={onNext} formProps={formProps} prior={prior} onOpenPrior={onOpenPrior} />
                 )}
               </div>
-            </div>
+            </div>}
           </>
         )}
       </div>
