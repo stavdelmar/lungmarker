@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
@@ -18,6 +18,7 @@ import { MIN_LONG_AXIS_MM } from '@/lib/exportRows';
 import { notFoundNote } from '@/lib/uncertainty';
 import { matchesToCheck } from '@/lib/matchChecks';
 import { fingerprint, engineState, withLaterScans, resetScans } from '@/lib/reimport';
+import { reviewLoadState, openingSlice } from '@/lib/reviewLoad';
 import { sortNodules, approveBlockers, nextItem, unconfirmedOutlines, priorCoverage, CENTRAL } from '@/lib/reviewChecks';
 import EngineOffline from '@/components/EngineOffline';
 import ReviewHeader from '@/components/review/ReviewHeader';
@@ -102,7 +103,16 @@ function ReviewScan() {
   const priorScanNow = priorQ.data?.scan || priorScanLinked;
   const waitForPrior = !!scan && scan.timepoint !== 'Baseline' && scan.review_status === 'Not started' && !!priorScanNow && !isApproved(priorScanNow) && !forceStart;
   const nav = useNavigate();
-  const timer = useScanTimer({ scanId: scan?.id, initial: scan?.active_seconds, initialTotal: scan?.total_seconds, enabled: !!scan && me.isReviewer && !approved && !waitForPrior, idleSeconds: settings?.idle_pause_seconds || 120 });
+  // Nothing is drawn from data that hasn't arrived (no "0 nodules", no "prior not matched", no slice #1) and the
+  // timer waits until the scan is really there. Once ready it stays ready (saves refetch in the background).
+  const [loadedOnce, setLoadedOnce] = useState(false);
+  const loadState = reviewLoadState({
+    wasReady: loadedOnce, scan, isReviewer: me.isReviewer, nodules: nodQ.data, nodulesFetching: nodQ.isFetching, meta: metaQ.data, findings: findQ.data,
+    engineError: !base || metaQ.isError || findQ.isError, patientScans: patientQ.data, priorId, prior: priorQ.data, waitForPrior,
+  });
+  const ready = loadState === 'ready';
+  useEffect(() => { if (ready && !loadedOnce) setLoadedOnce(true); }, [ready, loadedOnce]);
+  const timer = useScanTimer({ scanId: scan?.id, initial: scan?.active_seconds, initialTotal: scan?.total_seconds, enabled: !!scan && ready && me.isReviewer && !approved && !waitForPrior, idleSeconds: settings?.idle_pause_seconds || 120 });
   const initRef = useRef(false);
   useEffect(() => {
     if (initRef.current || !scan || !me.isReviewer || scan.review_status !== 'Not started' || !nodQ.data || !findQ.data || health.isLoading || (priorId && !priorQ.data) || waitForPrior) return;
@@ -126,14 +136,20 @@ function ReviewScan() {
     if (autoMed.current) { setWin('lung'); autoMed.current = false; }
     setSelId(n.id); if (n.key_slice_z != null) setZ(n.key_slice_z);
   };
-  // First selection: where "Save & exit" left off, else the first item still open (Central areas if only that is left).
-  useEffect(() => {
-    if (selId || !scan || !nodQ.data || nodQ.isFetching || scan.review_status === 'Not started') return;
+  // First selection, once everything has loaded: where "Save & exit" left off, else the first item still open (Central
+  // areas if only that is left). The image opens on the first nodule's key slice; an item without one ("Central
+  // areas", a prior "not found?") keeps that slice instead of slice #1. A layout effect, so the first frame drawn
+  // after loading is already on that slice (no flash of slice #1).
+  useLayoutEffect(() => {
+    if (!ready || selId || !scan || scan.review_status === 'Not started') return;
+    setZ(openingSlice(nodules, nS));
     const resume = scan.resume_item_id;
     if (resume && (resume === CENTRAL || nodules.some((n) => n.id === resume))) return select(resume === CENTRAL ? { id: CENTRAL } : nodules.find((n) => n.id === resume));
     const open = nodules.find((n) => !(n.status === 'Accepted' || n.status === 'Rejected'));
     select(open || (!scan.central_checked_at || !nodules.length ? { id: CENTRAL } : nodules[0]));
-  }, [nodules.length, scan?.review_status, !!meta, nodQ.isFetching]);
+  }, [ready, nodules.length, scan?.review_status]);
+  // Follow-up waiting for its prior: show the AI's first finding rather than slice #1.
+  useLayoutEffect(() => { if (ready && waitForPrior) setZ(openingSlice(findQ.data?.findings, nS)); }, [ready, waitForPrior]);
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['nodules', id] });
   // A failed save must never leave the screen showing something that isn't saved: say so, drop the unsaved
@@ -432,7 +448,7 @@ function ReviewScan() {
       await resetScans(affected, me, { engineScans, reason: 'engine output changed' });
       await timer.reset(); // the open page's clocks would otherwise write the old minutes back
       qc.invalidateQueries(); // everything about these scans is new
-      initRef.current = false; setSelId(null); setAskReimport(false);
+      initRef.current = false; setSelId(null); setAskReimport(false); setLoadedOnce(false);
     } catch (e) { setNotice(`Re-import failed: ${e.message}`); }
     setBusy(false);
   };
@@ -490,7 +506,7 @@ function ReviewScan() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-72px)]">
-      <ReviewHeader scan={scan} timer={timer} showTimer={me.isReviewer && !approved && !waitForPrior} onResetTimer={resetTimer} readOnly={locked} prior={scan.timepoint !== 'Baseline' ? (priorScanNow || null) : undefined} onOpenPrior={() => priorScanNow && nav(`/review/${priorScanNow.id}`)} />
+      <ReviewHeader scan={scan} timer={timer} showTimer={ready && me.isReviewer && !approved && !waitForPrior} onResetTimer={resetTimer} readOnly={locked} prior={scan.timepoint !== 'Baseline' ? (priorScanNow || null) : undefined} onOpenPrior={() => priorScanNow && nav(`/review/${priorScanNow.id}`)} />
       <div className="flex flex-1 min-h-0">
         <div className="w-[65%] flex flex-col min-w-0 bg-neutral-950">
           {engineChanged && (
@@ -509,8 +525,10 @@ function ReviewScan() {
           {notice && <div className="px-3 py-2 text-xs bg-rose-950/60 text-rose-100 border-b border-rose-900 flex">{notice}<button className="ml-auto underline" onClick={() => setNotice('')}>Dismiss</button></div>}
           {metaQ.isError || findQ.isError || (!base) ? (
             <div className="p-6"><EngineOffline dark onRetry={retry} message={metaQ.error?.message || findQ.error?.message || 'Engine URL is not set (Settings).'} /></div>
-          ) : !meta ? (
-            <div className="flex-1 grid place-items-center"><Loader2 className="w-5 h-5 animate-spin text-neutral-500" /></div>
+          ) : !meta || !ready ? (
+            <div className="flex-1 grid place-items-center" data-loading="viewer">
+              <div className="flex items-center gap-2 text-sm text-neutral-400"><Loader2 className="w-4 h-4 animate-spin" />Loading scan…</div>
+            </div>
           ) : (
             <ViewerPane meta={meta} base={base} sid={sid} z={z} step={step} setZ={setZ} win={win} setWin={setWin} nodules={nodules} shapes={shapes}
               sel={sel} draft={draft} editable={!locked} mode={mode} clicks={clicks} onSelect={select} onImageClick={onImageClick} points={points}
@@ -530,7 +548,7 @@ function ReviewScan() {
               }} />
           )}
         </div>
-        <NodulePanel scan={scan} nodules={nodules} selId={selId} sel={sel} onSelect={select} locked={locked} isReviewer={me.isReviewer} followup={followup}
+        <NodulePanel loadState={loadState} scan={scan} nodules={nodules} selId={selId} sel={sel} onSelect={select} locked={locked} isReviewer={me.isReviewer} followup={followup}
           adding={mode === 'add'} onAdd={() => { setMode(mode === 'add' ? null : 'add'); setClicks([]); }}
           canAccept={canAccept} under4={under4} onAccept={accept}
           notFound={{ onConfirm: confirmNotFound, onHere: notFoundIsHere, onReopen: (n) => attempt('Saving', async () => { await saveNodule(scan, n, { status: 'Pending', reject_reason: '', match_to_prior: '' }, me); await refresh(); }) }}
