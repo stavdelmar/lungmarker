@@ -64,5 +64,8 @@ export function reviewBreakdown(nodules) {
     added: nodules.filter((n) => n.source !== 'AI' && n.kind !== 'prior_not_found' && n.status === 'Accepted').length,
     measured: measured.length,
     volumes: measured.filter((n) => volumeOf(n) != null).length,
+    // |approved − AI| long axis (mm) for accepted AI findings that have both values
+    axisDeltas: ai.filter((n) => n.status === 'Accepted' && n.ai_draft?.long != null && n.long_axis_mm != null)
+      .map((n) => Math.abs(n.long_axis_mm - n.ai_draft.long)),
   };
 }
