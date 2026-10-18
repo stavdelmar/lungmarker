@@ -1,22 +1,35 @@
 import { minutesOnScan } from '@/lib/minutes';
 
-// "Before 45 → with the tool 9 min (−80%) · n = 1 scan" for one timepoint group.
-export default function MinutesCompare({ label, before, scans }) {
-  const v = scans.map(minutesOnScan).filter((x) => x != null);
-  const n = v.length;
-  const now = n ? Math.round(v.reduce((a, b) => a + b, 0) / n) : null;
+const MAX = 60;
+const x = (m) => `${(Math.min(Math.max(m, 0), MAX) / MAX) * 100}%`;
+const median = (v) => { const s = [...v].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+export const scanMinutes = (scans) => scans.map(minutesOnScan).filter((v) => v != null);
+
+// One dumbbell row: grey = before, dark = median with the tool, small dots = each scan, dashed = target (half).
+export default function MinutesCompare({ label, before, values }) {
+  const n = values.length;
+  const now = n ? Math.round(median(values)) : null;
   const pct = before && now != null ? Math.round(((now - before) / before) * 100) : null;
+  const lo = now != null ? Math.min(before ?? now, now) : null;
+  const hi = now != null ? Math.max(before ?? now, now) : null;
   return (
-    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm py-2 border-t border-slate-100 first:border-t-0">
+    <div className="flex items-center gap-3 h-14">
       <span className="w-20 text-xs font-medium text-slate-700">{label}</span>
-      {n === 0 ? <span className="text-xs text-slate-400">no scans yet</span> : <>
-        <span className="text-slate-700">
-          Before <span className="font-mono">{before ?? '—'}</span> → with the tool <span className="font-mono font-semibold text-slate-900">{now}</span> min
-          {pct != null && <span className={`font-mono ml-1 ${pct <= 0 ? 'text-emerald-700' : 'text-red-700'}`}>({pct > 0 ? '+' : '−'}{Math.abs(pct)}%)</span>}
-          <span className="text-slate-500"> · n = {n} scan{n === 1 ? '' : 's'}</span>
-        </span>
-        {n < 5 && <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[11px] text-slate-600">small sample, not yet a reliable comparison</span>}
-      </>}
+      <div className="relative flex-1 h-full">
+        <div className="absolute inset-x-0 top-1/2 h-px bg-slate-100" />
+        {before != null && <>
+          <div className="absolute top-2 bottom-2 border-l border-dashed border-slate-400" style={{ left: x(before / 2) }} />
+          <span className="absolute top-0 -translate-x-1/2 text-[10px] text-slate-400 whitespace-nowrap" style={{ left: x(before / 2) }}>Target: half</span>
+        </>}
+        {now != null && before != null && <>
+          <div className="absolute top-1/2 h-0.5 -translate-y-1/2 bg-slate-400" style={{ left: x(lo), width: `calc(${x(hi)} - ${x(lo)})` }} />
+          {pct != null && <span className={`absolute bottom-0 -translate-x-1/2 text-[11px] font-mono ${pct <= 0 ? 'text-emerald-700' : 'text-red-700'}`} style={{ left: x((lo + hi) / 2) }}>{pct > 0 ? '+' : '−'}{Math.abs(pct)}%</span>}
+        </>}
+        {values.map((v, i) => <div key={i} title={`${v} min`} className="absolute top-1/2 w-2 h-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-900/25" style={{ left: x(v) }} />)}
+        {before != null && <div title={`Before: ${before} min`} className="absolute top-1/2 w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-400 ring-2 ring-white" style={{ left: x(before) }} />}
+        {now != null && <div title={`With the tool (median): ${now} min`} className="absolute top-1/2 w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-900 ring-2 ring-white" style={{ left: x(now) }} />}
+      </div>
+      <span className="w-24 text-xs text-slate-500 font-mono">{n ? `n = ${n}` : <span className="font-sans text-slate-400">no scans yet</span>}</span>
     </div>
   );
 }
