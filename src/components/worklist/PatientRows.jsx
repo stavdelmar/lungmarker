@@ -3,6 +3,7 @@ import StatusBadge from '@/components/StatusBadge';
 import { priorOf, isApproved } from '@/lib/patients';
 import { minutesOnScan, openMinutes } from '@/lib/minutes';
 
+const sub = 'text-left font-medium px-4 py-1.5 text-[11px] uppercase tracking-wider text-slate-400';
 
 // One patient: a clickable summary row (same action as its button), then — when expanded — its scans in order.
 export default function PatientRows({ p, all, expanded, onToggle, onOpen, showMinutes }) {
@@ -10,8 +11,8 @@ export default function PatientRows({ p, all, expanded, onToggle, onOpen, showMi
   const cols = showMinutes ? 5 : 4;
   return (
     <>
-      <tr onClick={onToggle} className="border-t-2 border-slate-200 cursor-pointer bg-slate-50 hover:bg-slate-100 text-[15px]">
-        <td className="px-4 py-4 font-mono font-bold text-slate-900">
+      <tr onClick={onToggle} className={`border-t border-slate-200 cursor-pointer ${p.status === 'Done' ? 'bg-slate-50/50 hover:bg-slate-50' : 'hover:bg-slate-50'}`}>
+        <td className="px-4 py-3 font-mono font-medium">
           <span className="inline-flex items-center gap-1.5">
             <button onClick={(e) => { e.stopPropagation(); onToggle(); }} aria-label={expanded ? 'Collapse' : 'Expand'} className="w-6 h-6 -ml-1 grid place-items-center rounded hover:bg-slate-200"><Chev className="w-4 h-4 text-slate-400" /></button>
             {p.patient_id}
@@ -36,15 +37,15 @@ export default function PatientRows({ p, all, expanded, onToggle, onOpen, showMi
         </td>
       </tr>
       {expanded && (
-        <tr className="bg-slate-50"><td colSpan={cols} className="pl-6 pr-4 pt-1 pb-4">
-          <div className="ml-3 border-l-2 border-slate-300 bg-white rounded-r-md ring-1 ring-slate-200 overflow-hidden">
-          <table className="w-full text-xs">
+        <tr className="bg-slate-50/60"><td colSpan={cols} className="p-0">
+          <table className="w-full text-[13px]">
+            <thead><tr>{['Timepoint', 'Date', 'Series', 'AI findings', 'Status', ...(showMinutes ? ['Minutes'] : []), 'Prior'].map((h, i) => <th key={h} className={`${sub} ${i === 0 ? 'pl-11' : ''}`}>{h}</th>)}</tr></thead>
             <tbody>
               {p.scans.map((s) => {
                 const prior = priorOf(s, all);
                 return (
-                  <tr key={s.id} onClick={() => onOpen(s)} className="border-t border-slate-100 first:border-t-0 hover:bg-slate-50 cursor-pointer">
-                    <td className="pl-4 pr-4 py-2 whitespace-nowrap font-medium text-slate-700">{s.timepoint}{s.id === p.next?.id && <span className="ml-2 text-[11px] text-teal-700 font-medium">next</span>}</td>
+                  <tr key={s.id} onClick={() => onOpen(s)} className="border-t border-slate-100 hover:bg-teal-50/40 cursor-pointer">
+                    <td className="pl-11 pr-4 py-2 whitespace-nowrap">{s.timepoint}{s.id === p.next?.id && <span className="ml-2 text-[11px] text-teal-700 font-medium">next</span>}</td>
                     <td className="px-4 font-mono text-xs text-slate-600">{String(s.scan_date || '').slice(0, 10) || '—'}</td>
                     <td className="px-4 font-mono text-xs text-slate-600">{s.series_number ?? '—'}</td>
                     <td className="px-4 font-mono text-xs text-slate-600">{s.ai_findings_count ?? '—'}</td>
@@ -62,7 +63,6 @@ export default function PatientRows({ p, all, expanded, onToggle, onOpen, showMi
               })}
             </tbody>
           </table>
-          </div>
         </td></tr>
       )}
     </>
