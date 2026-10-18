@@ -119,10 +119,10 @@ export default function Worklist() {
           </div>
         )}
       </div>
-      <div className="flex items-center gap-2 mt-5">
+      <div className="flex items-center gap-1 mt-5 border-b border-slate-200">
         {CHIPS.map(([k, label]) => (
           <button key={k} onClick={() => setChip(k)}
-            className={`h-7 px-3 rounded-full text-xs border transition-colors ${chip === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400'}`}>{label}</button>
+            className={`px-3 py-2 text-sm -mb-px border-b-2 whitespace-nowrap ${chip === k ? 'border-slate-900 font-medium text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>{label}</button>
         ))}
         <label className="ml-auto flex items-center gap-1.5 text-xs text-slate-500">Sort by:
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="h-7 px-2 rounded-md border border-slate-300 bg-white text-xs text-slate-800">
