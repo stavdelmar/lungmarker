@@ -62,7 +62,7 @@ export default function NoduleSteps({ sel, nodules, locked, followup, canAccept,
           <div className="space-y-2">
             <div className="flex gap-2">
               <button onClick={() => advance(() => setIsNodule(true))} title="Yes (Enter)" className="flex-1 min-w-24 px-3 py-1.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 flex flex-col items-center justify-center leading-tight">
-                <span className="text-sm font-semibold flex items-center gap-1.5 whitespace-nowrap"><Check className="w-4 h-4 shrink-0" />Yes</span>
+                <span className="relative text-sm font-semibold whitespace-nowrap"><Check className="w-4 h-4 absolute right-full mr-1.5 top-1/2 -translate-y-1/2" />Yes</span>
                 <kbd className="text-[10px] font-normal opacity-80 font-sans">Enter</kbd>
               </button>
               <button onClick={() => setRejecting((r) => !r)} className={`${big.replace("h-9 ", "")} self-stretch border-2 border-rose-200 bg-white text-rose-700 hover:bg-rose-50`}><X className="w-4 h-4 shrink-0" />Reject</button>
