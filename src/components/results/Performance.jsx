@@ -26,9 +26,10 @@ export default function Performance({ scans, settings }) {
       <section className="bg-white border border-slate-200 rounded-lg p-4">
         <div className="text-xs font-medium text-slate-700 mb-1">Minutes per scan · before vs with the tool</div>
         <div className="flex items-center gap-3 text-[11px] text-slate-500 mb-1">
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-slate-400" />Before</span>
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-slate-900" />With the tool (median)</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-900/25" />Each scan</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-orange-600" />Before</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-600" />With the tool, median</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full border border-blue-600/60" />Each scan</span>
+          <span className="flex items-center gap-1"><span className="h-3 border-l border-dashed border-slate-400" />Target: half the time</span>
         </div>
         <MinutesCompare label="Baseline" before={settings.baseline_minutes_baseline} values={base} />
         <MinutesCompare label="Follow-up" before={settings.baseline_minutes_followup} values={fu} />
