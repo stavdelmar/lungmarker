@@ -47,6 +47,10 @@
     "key_slice_z": {
       "type": "number"
     },
+    "key_slice_manual": {
+      "type": "boolean",
+      "description": "The reviewer chose the key slice (Set as key slice); outline edits never move it back"
+    },
     "type": {
       "type": "string",
       "enum": [

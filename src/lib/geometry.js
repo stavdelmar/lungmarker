@@ -209,7 +209,7 @@ export function slicePatch(n, zz, newPoly, { sp, dz, engineContours, slices }) {
   if (n.source !== 'AI') {
     const drawn = drawnSlices({ ...n, ...patch });
     const [kz] = Object.entries(drawn).map(([k, p]) => [Number(k), polyAreaMm2(p, sp)]).sort((a, b) => b[1] - a[1])[0] || [n.key_slice_z];
-    if (kz !== n.key_slice_z && drawn[String(kz)]) {
+    if (!n.key_slice_manual && kz !== n.key_slice_z && drawn[String(kz)]) { // never undo a key slice Daniel chose
       const edits = Object.fromEntries(Object.entries(drawn).filter(([k]) => Number(k) !== kz));
       Object.assign(patch, { key_slice_z: kz, slice_number: slices?.find((s) => s.z === kz)?.slice_number ?? kz + 1, key_contour_px: drawn[String(kz)], contour_edits: edits });
     }
@@ -220,4 +220,36 @@ export function slicePatch(n, zz, newPoly, { sp, dz, engineContours, slices }) {
   if ('key_contour_px' in patch && patch.key_contour_px?.length > 2) Object.assign(patch, axesFromOutline(patch.key_contour_px, sp));
   patch.volume_stale = false;
   return patch;
+}
+
+// ---- Key slice chosen by the reviewer (Daniel, 18 Oct: of two near-equal slices he measures the one with the
+// sharpest edges). Slices it can move to: AI nodules → any slice with an outline; hand-drawn nodules → only slices
+// Daniel outlined himself (the slices filled in between are estimates, not measurements).
+export function keySliceOptions(n, engineContours, sp) {
+  if (!n || n.kind === 'prior_not_found') return [];
+  const zs = n.source && n.source !== 'AI'
+    ? Object.entries(drawnSlices(n)).map(([z]) => Number(z))
+    : outlinedSlices(n, engineContours, sp);
+  return zs.sort((a, b) => a - b);
+}
+
+// Make slice z the key slice of nodule n. Every slice keeps exactly the outline it has now (so the volume doesn't
+// change and isn't in the patch): the outline on z becomes key_contour_px, the old key slice's outline is kept as a
+// slice edit when it differs from the engine's, and long / short axes are measured on z. null = not possible.
+export function keySlicePatch(n, z, { sp, engineContours, slices }) {
+  if (z == null || z === n.key_slice_z || !keySliceOptions(n, engineContours, sp).includes(z)) return null;
+  const poly = sliceContour(n, z, engineContours, sp);
+  const axes = axesFromOutline(poly, sp);
+  if (!axes) return null;
+  const edits = { ...(n.contour_edits || {}) };
+  delete edits[String(z)];
+  const oldZ = n.key_slice_z, oldPoly = n.key_contour_px || [];
+  if (oldZ != null) {
+    const engineOld = n.source && n.source !== 'AI' ? null : largestPoly(engineContours?.[String(oldZ)]);
+    if (engineOld == null || JSON.stringify(engineOld) !== JSON.stringify(oldPoly)) edits[String(oldZ)] = oldPoly;
+  }
+  return {
+    key_slice_z: z, slice_number: slices?.find((s) => s.z === z)?.slice_number ?? z + 1, key_slice_manual: true,
+    key_contour_px: poly, contour_edits: edits, ...axes, mean_diameter_mm: meanOf(axes.long_axis_mm, axes.short_axis_mm),
+  };
 }

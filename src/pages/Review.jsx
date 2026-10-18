@@ -12,7 +12,7 @@ import { insertPoint, deletePoint, MIN_POINTS } from '@/lib/pointEdit';
 import { priorOf, isApproved, nextScanForPatient, nextPatient } from '@/lib/patients';
 import { fetchAll } from '@/lib/data';
 import { saveNodule, logEvent, approveScan, markCentralChecked } from '@/lib/edits';
-import { lenMm, meanOf, findingPatch, sliceStepMm, volumeFromContours, sliceContour, allSliceContours, slicePatch, drawnSlices, interpolateSlices, handVolumeReady, outlinedSlices } from '@/lib/geometry';
+import { lenMm, meanOf, findingPatch, sliceStepMm, volumeFromContours, sliceContour, allSliceContours, slicePatch, drawnSlices, interpolateSlices, handVolumeReady, outlinedSlices, keySliceOptions, keySlicePatch } from '@/lib/geometry';
 import { brushEdit, lassoToPoly } from '@/lib/maskEdit';
 import { MIN_LONG_AXIS_MM } from '@/lib/exportRows';
 import { notFoundNote } from '@/lib/uncertainty';
@@ -223,7 +223,7 @@ function ReviewScan() {
 
   // ---- Corrections without an engine: erase (E), draw (D), undo (Ctrl+Z) ----
   const brushPx = brushMm / (sp[1] || 1);
-  const OUTLINE_FIELDS = ['key_contour_px', 'contour_edits', 'key_slice_z', 'slice_number', 'long_axis_px', 'short_axis_px', 'long_axis_mm', 'short_axis_mm', 'volume_mm3', 'volume_stale'];
+  const OUTLINE_FIELDS = ['key_contour_px', 'contour_edits', 'key_slice_z', 'key_slice_manual', 'slice_number', 'long_axis_px', 'short_axis_px', 'long_axis_mm', 'short_axis_mm', 'volume_mm3', 'volume_stale'];
   // Replace nodule n's outline on slice zz; axes (key slice) and volume update at once in the browser.
   const editSlice = async (n, zz, newPoly, source) => {
     const patch = slicePatch(n, zz, newPoly, { sp, dz, engineContours: contoursOf(n), slices: meta.slices });
@@ -241,9 +241,34 @@ function ReviewScan() {
     const last = undoRef.current.pop();
     if (!last) { setNotice('Nothing to undo.'); return; }
     const fresh = await Nodule.get(last.id);
-    await saveNodule(scan, fresh, last.prev, me, { source: 'undo' });
+    await saveNodule(scan, fresh, last.prev, me, { source: 'undo', ...(last.opts || {}) });
     await refresh();
   };
+  // ---- Key slice chosen by the reviewer (Daniel, 18 Oct): he measures on the slice with the sharpest edges.
+  // Every slice keeps its outline, so the volume and "outline confirmed" stay; the axes are measured on the new
+  // slice. Trail: Slice # (AI value = the AI's key slice) + the axes. Undo restores the previous key slice.
+  const KEY_QUIET = ['key_contour_px', 'contour_edits'];
+  const setKeySlice = async (n, zz) => {
+    const patch = keySlicePatch(n, zz, { sp, engineContours: contoursOf(n), slices: meta?.slices });
+    if (!patch) return;
+    const keep = { outline_confirmed: !!n.outline_confirmed };
+    if (n.id === sel?.id) { const nd = { key_contour_px: patch.key_contour_px, long_axis_px: patch.long_axis_px, short_axis_px: patch.short_axis_px }; draftRef.current = nd; setDraft(nd); }
+    undoRef.current.push({ id: n.id, prev: { ...Object.fromEntries(OUTLINE_FIELDS.map((f) => [f, n[f] ?? null])), ...keep }, opts: { quiet: KEY_QUIET } });
+    if (undoRef.current.length > 30) undoRef.current.shift();
+    await saveNodule(scan, n, { ...patch, ...keep }, me, { source: 'key slice set by hand', quiet: KEY_QUIET });
+    await refresh();
+  };
+  const keyOptions = useMemo(() => (sel ? keySliceOptions(sel, findingsById[sel.engine_finding_id]?.contours, sp) : []), [sel, findingsById, sp]);
+  const sliceNum = (zz) => meta?.slices?.find((s) => s.z === zz)?.slice_number ?? zz + 1;
+  const keySlice = sel && sel.kind !== 'prior_not_found' && sel.key_slice_z != null ? {
+    num: sel.slice_number ?? sliceNum(sel.key_slice_z),
+    aiNum: sel.source === 'AI' ? sel.ai_draft?.key_slice_number ?? null : null,
+    curNum: sliceNum(z),
+    canSet: !locked && z !== sel.key_slice_z && keyOptions.includes(z),
+    onKey: z === sel.key_slice_z,
+    set: () => setKeySlice(sel, z),
+    go: () => setZ(sel.key_slice_z),
+  } : null;
   const onStrokeEnd = (points, e) => {
     if (locked) return;
     if (mode === 'erase' && sel) {
@@ -493,7 +518,7 @@ function ReviewScan() {
           onRejectClick={() => setRejectOpen(true)} onReject={reject} onOpenPrior={setPriorView} onNext={next} onApprove={approve} onReopen={reopen}
           prior={{ base, priorScan: priorQ.data?.scan, priorNodules, scan }}
           formProps={{
-            priorLabels: priorNodules.map((p) => p.nodule_label), aiSuggest, onSave: save, span, z, goSlice: setZ,
+            priorLabels: priorNodules.map((p) => p.nodule_label), aiSuggest, onSave: save, span, z, goSlice: setZ, keySlice,
             onConfirm: () => {
               if (sel.source !== 'AI' && !handVolumeReady(drawnSlices(sel))) { setNotice(`To record a volume for ${sel.nodule_label}, outline it (D) on its top, middle and bottom slices; the slices in between are filled in. Without that, leave the outline unconfirmed: Volume stays empty.`); return; }
               const vol = sel.volume_mm3 ?? volumeFromContours(allSliceContours(sel, contoursOf(sel), sp), sp, dz);

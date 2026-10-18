@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, X, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
+import { Check, X, ChevronRight, ArrowUp, ArrowDown, Crosshair } from 'lucide-react';
 import Step from '@/components/review/Step';
 import MatchCompare from '@/components/review/MatchCompare';
 import { matchWarnings } from '@/lib/matchChecks';
@@ -39,6 +39,21 @@ export default function NoduleSteps({ sel, nodules, locked, followup, canAccept,
   const matchCheck = matchWarnings(sel, sel.match_to_prior, prior?.priorNodules || [], nodules).length > 0;
   const match = sel.match_to_prior === 'N/A' ? 'New nodule' : sel.match_to_prior ? `Same as prior ${sel.match_to_prior}${matchCheck ? ' · ⚠ check' : ''}` : '';
   const sp = { locked, onSave: (patch) => { setOpenStep(null); return formProps.onSave(patch); } };
+  // Step 1: Enter = Yes, so a clear case is one key press (Daniel, 18 Oct). Not while typing, not with a dialog open.
+  const enterIsYes = !locked && !rejected && !accepted && cur === 1 && state(1) === 'current' && !rejecting;
+  useEffect(() => {
+    if (!enterIsYes) return undefined;
+    const h = (e) => {
+      if (e.key !== 'Enter' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      const t = e.target;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(t?.tagName) || t?.isContentEditable || t?.closest?.('[role="dialog"]')) return;
+      e.preventDefault(); // also stops Enter from "clicking" whatever button has focus
+      advance(() => setIsNodule(true));
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [enterIsYes]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ks = formProps.keySlice;
   return (
     <div className="p-4">
       <Step n={1} title="Is it a nodule?" state={state(1)} open={cur === 1} onToggle={() => toggle(1)} summary={rejected ? `Rejected: ${sel.reject_reason}` : done[0] ? 'Yes' : ''}>
@@ -46,7 +61,7 @@ export default function NoduleSteps({ sel, nodules, locked, followup, canAccept,
         {!locked && (
           <div className="space-y-2">
             <div className="flex gap-2">
-              <button onClick={() => advance(() => setIsNodule(true))} className={`${big} bg-slate-900 text-white hover:bg-slate-800`}><Check className="w-4 h-4 shrink-0" />Yes</button>
+              <button onClick={() => advance(() => setIsNodule(true))} className={`${big} bg-slate-900 text-white hover:bg-slate-800`}><Check className="w-4 h-4 shrink-0" />Yes <kbd className="text-[10px] opacity-70 font-normal">Enter</kbd></button>
               <button onClick={() => setRejecting((r) => !r)} className={`${big} border-2 border-rose-200 bg-white text-rose-700 hover:bg-rose-50`}><X className="w-4 h-4 shrink-0" />Reject</button>
             </div>
             {rejecting && (
@@ -80,6 +95,24 @@ export default function NoduleSteps({ sel, nodules, locked, followup, canAccept,
                 {seenEnds[k] ? <Check className="w-3.5 h-3.5" /> : <Icon className="w-3.5 h-3.5" />}{label} · <span className="font-mono">{num}</span>
               </button>
             ))}
+          </div>
+        )}
+        {ks && (
+          <div className="flex flex-wrap items-center gap-1.5" data-keyslice>
+            <span className="text-[12px] text-slate-600 mr-auto">
+              <button type="button" onClick={ks.go} className="hover:underline" title="Go to the key slice">Key slice: <span className="font-mono text-slate-900">{ks.num}</span></button>
+              {ks.aiNum != null && ks.aiNum !== ks.num && <span className="text-slate-500"> (AI: <span className="font-mono">{ks.aiNum}</span>)</span>}
+            </span>
+            {ks.canSet ? (
+              <button type="button" data-set-key onClick={ks.set} title="Measure the long and short axis on this slice instead (e.g. its edges are sharper). Volume stays the same."
+                className={`${endBtn} border-slate-300 bg-white text-slate-700 hover:bg-slate-50`}>
+                <Crosshair className="w-3.5 h-3.5" />Set slice <span className="font-mono">{ks.curNum}</span> as key slice
+              </button>
+            ) : locked ? null : ks.onKey ? (
+              <span className="text-[11px] text-slate-400">Sharper edges on another slice? Scroll there to make it the key slice.</span>
+            ) : (
+              <span className="text-[11px] text-slate-400">No outline on slice {ks.curNum}</span>
+            )}
           </div>
         )}
         <VolumeConfirm n={sel} locked={locked} onSave={formProps.onSave} onConfirm={formProps.onConfirm} />

@@ -3,7 +3,7 @@ import { meanOf } from '@/lib/geometry';
 import { minutesOnScan } from '@/lib/minutes';
 
 const AI_KEY = { lobe: 'lobe', type: 'type', slice_number: 'key_slice_number', long_axis_mm: 'long', short_axis_mm: 'short', solid_component_mm: 'solid', volume_mm3: 'volume', key_contour_px: 'contour', match_to_prior: 'match_label' };
-const SKIP = ['exported_at', 'changed_after_export', 'long_axis_px', 'short_axis_px', 'mean_diameter_mm', 'was_edited', 'outline_confirmed_by_initials', 'outline_confirmed_at', 'key_slice_z', 'volume_stale'];
+const SKIP = ['exported_at', 'changed_after_export', 'long_axis_px', 'short_axis_px', 'mean_diameter_mm', 'was_edited', 'outline_confirmed_by_initials', 'outline_confirmed_at', 'key_slice_z', 'key_slice_manual', 'volume_stale'];
 export const AI_FIELDS = ['lobe', 'type', 'slice_number', 'long_axis_mm', 'short_axis_mm', 'solid_component_mm', 'volume_mm3', 'outline'];
 
 export function fmtVal(key, v) {
@@ -31,7 +31,7 @@ export function logEvent(scan, nodule, field, oldV, newV, me) {
   return base44.entities.EditEvent.create({ ...eventBase(scan, nodule, me), field, ai_value: '', old_value: oldV ?? '', new_value: newV ?? '' });
 }
 
-export async function saveNodule(scan, given, patch, me, { source } = {}) {
+export async function saveNodule(scan, given, patch, me, { source, quiet = [] } = {}) {
   // Compare against the record as saved right now, not the page's copy: two quick edits of the same field
   // would otherwise both log the value from before the first edit ("8.5 → 8.3" instead of "39.2 → 8.3").
   let nodule = given;
@@ -47,7 +47,7 @@ export async function saveNodule(scan, given, patch, me, { source } = {}) {
   const base = eventBase(scan, nodule, me);
   const events = [];
   Object.keys(p).forEach((k) => {
-    if (SKIP.includes(k)) return;
+    if (SKIP.includes(k) || quiet.includes(k)) return; // quiet: saved, but described by another row (e.g. key slice moved)
     if (same(nodule[k], p[k])) return;
     const field = k === 'key_contour_px' || k === 'contour_edits' ? 'outline' : k;
     // An outline change is described by how it was made, since "16 points → 16 points" says nothing.
@@ -55,7 +55,7 @@ export async function saveNodule(scan, given, patch, me, { source } = {}) {
     const oldV = k === 'contour_edits' ? fmtVal(k, nodule[k] || {}) : fmtVal(k, nodule[k]);
     events.push({
       ...base, field, ai_value: fmtVal(k, nodule.ai_draft?.[AI_KEY[k]]), old_value: oldV, new_value: newV,
-      ...(source && field === 'outline' ? { source } : {}),
+      ...(source && (field === 'outline' || field === 'slice_number') ? { source } : {}),
     });
   });
   if (!events.length) return;
