@@ -11,7 +11,7 @@ export function DoubtPills({ n, size = 'sm' }) {
   return (
     <>
       {u.lowConf && (
-        <span className={`inline-flex items-center gap-1 rounded font-semibold bg-amber-400 text-amber-950 whitespace-nowrap ${cls}`}>
+        <span className={`inline-flex items-center gap-1 rounded font-semibold bg-amber-400 text-amber-950 max-w-full break-words [&>svg]:shrink-0 ${cls}`}>
           <AlertTriangle className="w-3.5 h-3.5" />AI unsure about the edges{u.faintRim && ': may be larger than drawn'}{u.pct != null && <span className="font-mono font-normal">· {u.pct}%</span>}
         </span>
       )}
