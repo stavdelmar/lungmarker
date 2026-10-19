@@ -19,11 +19,11 @@ export default function PerfTiles({ d }) {
   const med = median(d.axisDeltas || []);
   return (
     <div className="grid grid-cols-4 gap-3">
-      <Tile label="AI suggestions kept" value={pct(kept, aiAll)} sub={`${d.unchanged} unchanged + ${d.edited} edited of ${aiAll} AI findings`} />
-      <Tile label="Missed by the AI" value={pct(d.added, final)} sub={`${d.added} added by reviewer of ${final} final nodules`} />
+      <Tile label="AI suggestions kept" value={pct(kept, aiAll)} sub={`${d.unchanged} unchanged + ${d.edited} edited of ${aiAll} AI findings, in scans reviewed so far`} />
+      <Tile label="Added by the reviewer" value={d.added} sub={`of ${final} final nodules (${pct(d.added, final)}), in scans reviewed so far`} />
       <Tile label="Outline change, AI → approved" value={med == null ? '—' : `${med.toFixed(1)} mm`}
         sub={<>median long-axis change (expert noise 2.3 mm) · n = {(d.axisDeltas || []).length}</>} />
-      <Tile label="Volumes recorded" value={`${d.volumes} of ${d.measured}`} sub={`${pct(d.volumes, d.measured)} of accepted nodules`} />
+      <Tile label="Volumes recorded" value={`${d.volumes} of ${d.measured}`} sub={`${pct(d.volumes, d.measured)} of accepted nodules, in scans reviewed so far`} />
     </div>
   );
 }
