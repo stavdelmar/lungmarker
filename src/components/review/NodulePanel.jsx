@@ -50,7 +50,7 @@ function InlineLink({ onClick, className = '', title, children }) {
 }
 
 export default function NodulePanel(p) {
-  const { loadState = 'ready', scan, nodules, selId, sel, onSelect, locked, isReviewer, onAdd, adding, formProps, prior, followup, canAccept, under4, onAccept, onRejectClick, onNext, onReject, onOpenPrior,
+  const { loadState = 'ready', setupError, scan, nodules, selId, sel, onSelect, locked, isReviewer, onAdd, adding, formProps, prior, followup, canAccept, under4, onAccept, onRejectClick, onNext, onReject, onOpenPrior,
     checks, onApprove, onReopen, central, notFound, next, waitForPrior, onSaveExit, unconfirmed = [], onAccountPrior, matchChecks = [] } = p;
   const approved = scan.review_status === 'Approved';
   const loading = loadState !== 'ready'; // nothing below is drawn from data that hasn't arrived yet
@@ -78,6 +78,17 @@ export default function NodulePanel(p) {
           <div className="m-4 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900" data-loading="error">
             <div className="font-semibold">Can't load this scan's AI results</div>
             <p className="text-[13px] mt-1">The AI engine can't be reached, so the nodules can't be set up yet. Nothing was changed. Try again once the engine is back.</p>
+          </div>
+        ) : loadState === 'setup-failed' ? (
+          <div className="m-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 space-y-1.5" data-loading="setup-failed">
+            <div className="font-semibold">Read-only: this scan couldn't be set up for review</div>
+            <p className="text-[13px]">The server refused to save its AI results{setupError ? <> (<span className="font-mono text-[12px]">{setupError}</span>)</> : ''}. You can look at the images; nothing was changed.</p>
+            <p className="text-[12px] text-amber-800">Usually a missing reviewer role: an admin can set it in Settings → User roles, then reload this page.</p>
+          </div>
+        ) : loadState === 'not-set-up' ? (
+          <div className="m-4 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700 space-y-1.5" data-loading="not-set-up">
+            <div className="font-semibold">Not reviewed yet</div>
+            <p className="text-[13px]">A reviewer sets this scan up when they open it. You have read-only access, so its AI results aren't loaded here yet.</p>
           </div>
         ) : loading ? (
           <div className="p-4 space-y-3" data-loading="panel" aria-busy="true">
@@ -147,7 +158,7 @@ export default function NodulePanel(p) {
             {isReviewer && next && !next.scan && <div className="text-xs text-slate-500">All scans of <span className="font-mono">{scan.patient_id}</span> approved.</div>}
           </div>
         ) : loading ? (
-          <div className="h-8 text-xs text-slate-400 flex items-center">Loading…</div>
+          <div className="h-8 text-xs text-slate-400 flex items-center">{loadState === 'loading' ? 'Loading…' : 'Read-only'}</div>
         ) : isReviewer && !waitForPrior ? (
           <div className="flex items-center gap-2 text-xs">
             <span className="flex-1 min-w-0 leading-snug break-words">{/* wraps, never truncates: every reason stays visible */}

@@ -13,7 +13,7 @@
         "viewer"
       ],
       "default": "reviewer",
-      "description": "Review period (Stav, 20 Oct): new users are reviewers by default; change per user in Settings → User roles"
+      "description": "Review period (Stav, 20 Oct): new users get reviewer (saved at first sign-in by the app if Base44 did not apply this default); change per user in Settings → User roles"
     }
   }
 }

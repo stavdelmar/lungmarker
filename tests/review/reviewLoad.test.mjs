@@ -54,7 +54,7 @@ ok(reviewLoadState({ ...base, scan: fu('Approved'), patientScans: [], prior, eng
 
 // Waiting for the prior's approval is a deliberate card, not loading; read-only viewers don't wait for a setup.
 ok(reviewLoadState({ ...base, scan: fu(), patientScans: [], prior: { scan: { review_status: 'In review' }, nodules: [] }, waitForPrior: true }) === 'ready', 'waiting for prior approval → its card shows');
-ok(reviewLoadState({ ...base, isReviewer: false, scan: fu(), patientScans: [], prior, meta, findings, nodules: [], nodulesFetching: false }) === 'ready', 'viewer on a not-started scan → no setup to wait for');
+ok(reviewLoadState({ ...base, isReviewer: false, scan: fu(), patientScans: [], prior, meta, findings, nodules: [], nodulesFetching: false }) === 'not-set-up', 'viewer on a not-started scan → read-only "not reviewed yet", not "no nodules" (20 Oct)');
 
 // Opening slice: first nodule's key slice; no nodules → middle of the scan, never slice #1.
 ok(openingSlice(N, 300) === 152, 'opens on N1\'s key slice');

@@ -9,7 +9,7 @@ const links = [
 ];
 
 export default function Layout() {
-  const { user, isAdmin, isReviewer, initials } = useMe();
+  const { user, isAdmin, isReviewer, initials, loading: meLoading, roleError } = useMe();
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       <div className="sticky top-0 z-50 h-6 flex items-center justify-center bg-amber-50 border-b border-amber-200 text-[11px] tracking-wide text-amber-900">
@@ -27,7 +27,7 @@ export default function Layout() {
         </nav>
         <div className="ml-auto flex items-center gap-3 text-xs text-slate-500">
           {user && <span className="px-2 py-0.5 rounded bg-slate-100 font-mono">{initials}{isReviewer ? ' · reviewer' : ''}</span>}
-          {user && !isReviewer && <span className="px-2 py-0.5 rounded border border-slate-300 text-[11px] text-slate-600">Viewer · read only</span>}
+          {user && !isReviewer && !meLoading && <span className="px-2 py-0.5 rounded border border-slate-300 text-[11px] text-slate-600" title={roleError ? `Your role couldn't be saved (${roleError.message}). Ask an admin: Settings → User roles.` : undefined}>{roleError ? 'No role saved · read only' : 'Viewer · read only'}</span>}
           {isAdmin && (
             <NavLink to="/settings" title="Settings" aria-label="Settings"
               className={({ isActive }) => `w-7 h-7 grid place-items-center rounded-md ${isActive ? 'bg-slate-900 text-white' : 'hover:bg-slate-100 hover:text-slate-900'}`}>

@@ -106,16 +106,18 @@ function ReviewScan() {
   // Nothing is drawn from data that hasn't arrived (no "0 nodules", no "prior not matched", no slice #1) and the
   // timer waits until the scan is really there. Once ready it stays ready (saves refetch in the background).
   const [loadedOnce, setLoadedOnce] = useState(false);
+  const [setupError, setSetupError] = useState(null);
   const loadState = reviewLoadState({
-    wasReady: loadedOnce, scan, isReviewer: me.isReviewer, nodules: nodQ.data, nodulesFetching: nodQ.isFetching, meta: metaQ.data, findings: findQ.data,
+    wasReady: loadedOnce, meLoading: me.loading, setupError, scan, isReviewer: me.isReviewer, nodules: nodQ.data, nodulesFetching: nodQ.isFetching, meta: metaQ.data, findings: findQ.data,
     engineError: !base || metaQ.isError || findQ.isError, patientScans: patientQ.data, priorId, prior: priorQ.data, waitForPrior,
   });
   const ready = loadState === 'ready';
+  const readOnlyView = loadState === 'setup-failed' || loadState === 'not-set-up'; // images shown, nothing editable
   useEffect(() => { if (ready && !loadedOnce) setLoadedOnce(true); }, [ready, loadedOnce]);
   const timer = useScanTimer({ scanId: scan?.id, initial: scan?.active_seconds, initialTotal: scan?.total_seconds, enabled: !!scan && ready && me.isReviewer && !approved && !waitForPrior, idleSeconds: settings?.idle_pause_seconds || 120 });
   const initRef = useRef(false);
   useEffect(() => {
-    if (initRef.current || !scan || !me.isReviewer || scan.review_status !== 'Not started' || !nodQ.data || !findQ.data || health.isLoading || (priorId && !priorQ.data) || waitForPrior) return;
+    if (initRef.current || !scan || me.loading || !me.isReviewer || scan.review_status !== 'Not started' || !nodQ.data || !findQ.data || health.isLoading || (priorId && !priorQ.data) || waitForPrior) return;
     initRef.current = true;
     (async () => {
       const findings = findQ.data.findings || [];
@@ -124,8 +126,8 @@ function ReviewScan() {
         scanPatch: { first_opened_at: scan.first_opened_at || new Date().toISOString(), ai_findings_count: findings.length,
           ai_fingerprint: fingerprint(findQ.data), ai_imported_at: new Date().toISOString(), engine_version: health.data?.engine_version || scan.engine_version || '' } });
       qc.invalidateQueries({ queryKey: ['nodules', id] }); qc.invalidateQueries({ queryKey: ['scan', id] });
-    })().catch((e) => setNotice(`Setting up this scan failed: ${e.message}. Reload the page to try again.`));
-  }, [scan, me.isReviewer, nodQ.data, findQ.data, health.isLoading, priorQ.data, waitForPrior]);
+    })().catch((e) => setSetupError(e.message || String(e))); // shown read-only with the reason (no endless "Loading")
+  }, [scan, me.loading, me.isReviewer, nodQ.data, findQ.data, health.isLoading, priorQ.data, waitForPrior]);
 
   // Selecting the "Central areas" item switches to the mediastinal window (if the scan has it); selecting a nodule
   // afterwards switches back to the lung window.
@@ -149,7 +151,7 @@ function ReviewScan() {
     select(open || (!scan.central_checked_at || !nodules.length ? { id: CENTRAL } : nodules[0]));
   }, [ready, nodules.length, scan?.review_status]);
   // Follow-up waiting for its prior: show the AI's first finding rather than slice #1.
-  useLayoutEffect(() => { if (ready && waitForPrior) setZ(openingSlice(findQ.data?.findings, nS)); }, [ready, waitForPrior]);
+  useLayoutEffect(() => { if ((ready && waitForPrior) || readOnlyView) setZ(openingSlice(findQ.data?.findings, nS)); }, [ready, waitForPrior, readOnlyView]);
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['nodules', id] });
   // A failed save must never leave the screen showing something that isn't saved: say so, drop the unsaved
@@ -525,13 +527,13 @@ function ReviewScan() {
           {notice && <div className="px-3 py-2 text-xs bg-rose-950/60 text-rose-100 border-b border-rose-900 flex">{notice}<button className="ml-auto underline" onClick={() => setNotice('')}>Dismiss</button></div>}
           {metaQ.isError || findQ.isError || (!base) ? (
             <div className="p-6"><EngineOffline dark onRetry={retry} message={metaQ.error?.message || findQ.error?.message || 'Engine URL is not set (Settings).'} /></div>
-          ) : !meta || !ready ? (
+          ) : !meta || !(ready || readOnlyView) ? (
             <div className="flex-1 grid place-items-center" data-loading="viewer">
               <div className="flex items-center gap-2 text-sm text-neutral-400"><Loader2 className="w-4 h-4 animate-spin" />Loading scan…</div>
             </div>
           ) : (
             <ViewerPane meta={meta} base={base} sid={sid} z={z} step={step} setZ={setZ} win={win} setWin={setWin} nodules={nodules} shapes={shapes}
-              sel={sel} draft={draft} editable={!locked} mode={mode} clicks={clicks} onSelect={select} onImageClick={onImageClick} points={points}
+              sel={sel} draft={draft} editable={!locked && ready} mode={mode} clicks={clicks} onSelect={select} onImageClick={onImageClick} points={points}
               onDragEnd={onDragEnd} showRejected={showRejected} setShowRejected={setShowRejected} modeBar={modeBar} busy={busy}
               onStrokeEnd={onStrokeEnd} brushPx={brushPx} span={span}
               priorView={priorView && priorQ.data?.scan ? { base, priorScan: priorQ.data.scan, pn: priorView, onClose: () => setPriorView(null) } : null}
@@ -548,7 +550,7 @@ function ReviewScan() {
               }} />
           )}
         </div>
-        <NodulePanel loadState={loadState} scan={scan} nodules={nodules} selId={selId} sel={sel} onSelect={select} locked={locked} isReviewer={me.isReviewer} followup={followup}
+        <NodulePanel loadState={loadState} setupError={setupError} scan={scan} nodules={nodules} selId={selId} sel={sel} onSelect={select} locked={locked} isReviewer={me.isReviewer} followup={followup}
           adding={mode === 'add'} onAdd={() => { setMode(mode === 'add' ? null : 'add'); setClicks([]); }}
           canAccept={canAccept} under4={under4} onAccept={accept}
           notFound={{ onConfirm: confirmNotFound, onHere: notFoundIsHere, onReopen: (n) => attempt('Saving', async () => { await saveNodule(scan, n, { status: 'Pending', reject_reason: '', match_to_prior: '' }, me); await refresh(); }) }}
