@@ -12,7 +12,8 @@
         "reviewer",
         "viewer"
       ],
-      "default": "viewer"
+      "default": "reviewer",
+      "description": "Review period (Stav, 20 Oct): new users are reviewers by default; change per user in Settings → User roles"
     }
   }
 }

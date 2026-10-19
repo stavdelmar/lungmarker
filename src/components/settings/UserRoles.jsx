@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { DEFAULT_ROLE } from '@/hooks/useMe';
 
 export default function UserRoles() {
   const qc = useQueryClient();
@@ -18,7 +19,7 @@ export default function UserRoles() {
               <td className="px-4 text-slate-600">{u.email}</td>
               <td className="px-4"><input defaultValue={u.initials || ''} maxLength={4} onBlur={(e) => e.target.value.toUpperCase() !== (u.initials || '') && update(u, { initials: e.target.value.toUpperCase() })} className="w-16 h-7 px-2 rounded border border-slate-200 font-mono text-sm uppercase" /></td>
               <td className="px-4">
-                <select value={u.app_role || 'viewer'} onChange={(e) => update(u, { app_role: e.target.value })} className="h-7 px-1.5 rounded border border-slate-200 text-sm bg-white">
+                <select value={u.app_role || DEFAULT_ROLE} onChange={(e) => update(u, { app_role: e.target.value })} className="h-7 px-1.5 rounded border border-slate-200 text-sm bg-white">
                   <option value="viewer">viewer</option><option value="reviewer">reviewer</option>
                 </select>
               </td>
