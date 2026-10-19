@@ -1,62 +1,91 @@
-# Base44 Project
+# LungMarker app
 
-Use this repository to run and edit the app locally, then publish changes back through Base44.
+The review app of LungMarker, a tool that cuts the time a lung-cancer research team spends finding, outlining and measuring nodules on CT scans.
+Built on [Base44](https://base44.com) for the (simulated) Harbor Thoracic Oncology Lab, as part of the Base44 Forward Deployed Engineer home assignment.
 
-Any change pushed to the repo will also be reflected in the Base44 Builder.
+**For research use only. Not for clinical use. No clinical claims.**
 
-## Prerequisites
+- **Live app:** https://lung-marker-scan.base44.app. Sign in with Google (one click).
+- **Project overview, results and the AI engine:** [Lung-Tumour-Measurement-Engine](https://github.com/stavdelmar/Lung-Tumour-Measurement-Engine). Start there: it has the discovery story, the architecture, and the results (what works, what fails, how time saved was measured).
+- **Demo data:** public RIDER Lung CT scans with the engine's AI drafts, served read-only from `https://lungmarker-demo-data-sd.s3.eu-north-1.amazonaws.com/api/v1`.
 
-1. Clone the repository using the project's Git URL.
-2. Navigate to the project directory.
-3. Install dependencies: `npm install`.
-4. Install the Base44 CLI: `npm install -g base44@latest`.
-5. Install [Deno](https://docs.deno.com/runtime/getting_started/installation/) — the local Base44 backend runs on it.
+## Access
 
-Run `base44 --help` (or see the [CLI reference](https://docs.base44.com/developers/references/cli/commands/introduction)) for the full command surface.
+Anyone who signs in gets the **viewer** role, which is read-only: the Worklist, every scan, and the Dashboard.
+To review scans (confirm, edit, approve, export), you need the **reviewer** role. The owner grants it in **Settings (gear icon) → User roles**.
 
-## Run Locally
+## What the app does
 
-Three commands, from the project root:
+1. **Worklist.** Scans grouped by patient (baseline, then follow-ups), with the prior scan already linked. The AI has processed every scan before the reviewer opens it.
+2. **Review**, one nodule at a time, in four steps:
+   1. *Is it a nodule?* Confirm or reject with a reason. Rejected findings stay in the edit trail.
+   2. *Outline and measurements.* The AI's outline on every slice. Drag, add or delete points, Erase, Draw, Undo. Long and short axis and volume update at once. *First / Last slice* jump to the nodule's edges. The volume is recorded only after **Confirm outline**. An amber "AI unsure about the edges" label shows where to look closely.
+   3. *Match to the prior scan.* The AI suggests a match, shown side by side with the prior. The reviewer chooses Same, Other or New. A prior nodule that isn't seen is recorded as *Not found*.
+   4. *Notes and accept.*
+3. **Central check.** The AI's misses in testing were all tumours touching the hilum or mediastinum, so Approve stays blocked until the reviewer has checked those areas (mediastinal window, Add nodule).
+4. **Approve and export.** One click to Excel in the lab's 18-column master-sheet format, plus an append-only *Edit trail* sheet (AI draft vs final value, who, when). Each export holds only new rows.
+5. **Dashboard.** Report builder and export, nodules over time against expert measurement noise, and the AI's findings against the reviewer's decisions.
+
+A built-in timer records **active minutes** per scan, without long breaks. That is the lab's "Minutes on scan" column.
+
+## How it works
+
+```
+Engine (Python, batch on GPU)  ──►  static API on S3  ──►  this app (Base44)
+find · outline · measure · match     scans, slices, AI      review · approve · Excel export
+```
+
+- The app reads the engine's output over HTTP from the **Engine base URL** in Settings. The contract is [`docs/engine_api.md`](https://github.com/stavdelmar/Lung-Tumour-Measurement-Engine/blob/main/docs/engine_api.md) in the engine repo.
+- Base44 stores **review data only** (entities in `base44/entities/`): `Scan`, `Nodule`, `EditEvent` (the edit trail), `AppSettings`, `User`. Images are never stored in the app.
+- All editing (outline points, erase, draw, axes, volume) runs in the browser, in `src/lib/`.
+
+## Code map
+
+| Path | What it is |
+|---|---|
+| `src/pages/` | `Worklist.jsx`, `Review.jsx`, `Results.jsx` (the Dashboard), `Settings.jsx`, plus the sign-in pages |
+| `src/components/review/` | Review screen: viewer, slice slider, nodule list, the four steps, prior comparison |
+| `src/components/results/` | Dashboard: report builder, nodules over time, performance |
+| `src/components/settings/` | Test data reset / re-import, user roles |
+| `src/lib/` | App logic without UI: loading AI findings, outline geometry and editing, calipers, prior matching checks, timer minutes, edit trail, Excel export |
+| `base44/entities/` | Data model (Base44 entities) |
+| `tests/` | Logic tests for review and export (see below) |
+
+## Tests
 
 ```bash
-base44 login   # one-time per machine
-base44 link    # one-time per clone
+npm install
+npm test       # all review tests + the Excel export check
+npm run lint
+npm run build
+```
+
+`npm test` runs the app's own code from `src/lib` against synthetic AI findings and an in-memory stand-in for Base44. No engine or network is needed.
+The export check compares the generated workbook with the lab's master-sheet rules (30 checks). It needs `python3` with `openpyxl`, and is skipped if they are missing.
+Browser interaction (mouse handling on the scan) is tested by hand. See `tests/review/README.md` and `tests/export/README.md`.
+
+## Run locally (developers)
+
+Prerequisites: Node 20.19+ or 22.12+, `npm install`, the Base44 CLI (`npm install -g base44@latest`), and [Deno](https://docs.deno.com/runtime/getting_started/installation/) for the local Base44 backend.
+
+```bash
+base44 login   # once per machine
+base44 link    # once per clone; writes base44/.app.jsonc (gitignored)
 base44 dev     # local backend + frontend together
 ```
 
-Open the frontend URL that `base44 dev` prints (typically `http://localhost:5173`).
+Open the URL that `base44 dev` prints (usually `http://localhost:5173`). Then, in Settings, set the Engine base URL to the demo data URL above.
 
-Notes:
+- Don't run `npm run dev` alongside `base44 dev`. `base44 dev` already starts the frontend.
+- Local entity data is in-memory and is wiped when `base44 dev` restarts.
+- `base44 dev --remote` runs the frontend against the **live** backend, so writes go to production data.
 
-- **Every fresh clone needs `base44 link`.** It writes `base44/.app.jsonc` (the app-id pointer), which is deliberately gitignored. Your app id is in the Builder URL (`app.base44.com/apps/<id>/...`); `base44 link --help` shows the non-interactive flags.
-- **`base44 dev` runs the frontend for you** (via `site.serveCommand` in this repo's `base44/config.jsonc`) — never run `npm run dev` yourself: alone it serves a UI with no backend behind it (`[base44] Proxy not enabled`, every `/api` call fails), and alongside `base44 dev` the second Vite silently takes the next port and you end up looking at the wrong one.
-- **The app must be published at least once for the UI to load under `base44 dev`.** The frontend boots by fetching app settings from the hosted app; before the first publish that fails and every page redirects to login. The local API works regardless.
-- Entities, functions, and auth run locally — entity data is **in-memory only**, wiped when `base44 dev` restarts. Everything else (Core integrations, OAuth login) is forwarded to your deployed app. Full breakdown: [Local development overview](https://docs.base44.com/developers/backend/overview/local-dev/local-development-overview).
+## Publishing
 
-## Frontend Only, Hosted Backend
+This repo syncs both ways with the Base44 Builder through GitHub (`main`). After a push, wait until the Builder shows the sync finished, then **Publish** from the Base44 dashboard (`base44 dashboard open`).
+Don't use `base44 deploy`: it bypasses the git sync, and the live app drifts from the repo.
 
-To work on just the frontend against your app's live hosted backend:
+## Data and credits
 
-```bash
-base44 dev --remote
-```
-
-⚠️ In this mode writes go to your app's **production data** — plain `base44 dev` keeps everything local.
-
-## Publish Your Changes
-
-After pushing your changes to git, open the Base44 dashboard and publish the app:
-
-```bash
-base44 dashboard open
-```
-
-This repo syncs to Base44 through git, so publish from the dashboard rather than `base44 deploy` — a CLI deploy ships your local tree directly, bypassing the sync, and the deployed state silently diverges from the repo.
-
-## Docs & Support
-
-GitHub integration: [https://docs.base44.com/developers/app-code/local-development/github](https://docs.base44.com/developers/app-code/local-development/github)
-
-Local development: [https://docs.base44.com/developers/backend/overview/local-dev/local-development-overview](https://docs.base44.com/developers/backend/overview/local-dev/local-development-overview)
-
-Support: [https://app.base44.com/support](https://app.base44.com/support)
+The app shows only public data: RIDER Lung CT (Zhao et al., 2015, [doi:10.7937/k9/tcia.2015.u1x8a5nr](https://doi.org/10.7937/k9/tcia.2015.u1x8a5nr), CC BY 3.0) from The Cancer Imaging Archive.
+AI drafts are made by the engine with TotalSegmentator (Apache-2.0). Full credits are in the [engine repo](https://github.com/stavdelmar/Lung-Tumour-Measurement-Engine#data-and-credits).
