@@ -11,8 +11,8 @@ Built on [Base44](https://base44.com) for the (simulated) Harbor Thoracic Oncolo
 
 ## Access
 
-Anyone who signs in gets the **viewer** role, which is read-only: the Worklist, every scan, and the Dashboard.
-To review scans (confirm, edit, approve, export), you need the **reviewer** role. The owner grants it in **Settings (gear icon) → User roles**.
+Sign in with Google. During the review period, anyone who signs in gets the **reviewer** role (saved on first sign-in), so they can confirm, edit, approve and export. The data is demo data only.
+The owner can switch any user to **viewer** (read-only) in **Settings (gear icon) → User roles**.
 
 ## What the app does
 
