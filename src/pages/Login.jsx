@@ -39,8 +39,8 @@ export default function Login() {
   return (
     <AuthLayout
       icon={LogIn}
-      title="Welcome back"
-      subtitle="Log in to your account"
+      title="LungMarker"
+      subtitle="Sign in to the Harbor Thoracic Oncology Lab review tool"
       footer={
         <>
           Don't have an account?{" "}
